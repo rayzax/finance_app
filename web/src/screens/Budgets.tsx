@@ -58,7 +58,7 @@ export default function Budgets() {
                 <circle cx="64" cy="64" r="54" fill="none" stroke="rgba(201,168,106,0.14)" strokeWidth="10" />
                 <circle cx="64" cy="64" r="54" fill="none" stroke={ratio > 1 ? '#E08A5F' : '#C9A86A'} strokeWidth="10" strokeLinecap="round"
                   strokeDasharray={`${Math.min(1, ratio) * C} ${C + 1}`} transform="rotate(-90 64 64)" />
-                <text x="64" y="62" textAnchor="middle" fontFamily="Cormorant Garamond, serif" fontSize="30" fontWeight="600" fill="#EFE8D8">{d.limit > 0 ? `${pct}%` : '—'}</text>
+                <text x="64" y="62" textAnchor="middle" fontFamily="Cormorant Garamond, serif" fontSize="30" fontWeight="600" fill="#EFE8D8" style={{fontVariantNumeric:'lining-nums'}}>{d.limit > 0 ? `${pct}%` : '—'}</text>
                 <text x="64" y="82" textAnchor="middle" fontFamily="Inter, sans-serif" fontSize="11" fill="#9BA59E">spent</text>
               </svg>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>

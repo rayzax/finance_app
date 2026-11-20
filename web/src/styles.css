@@ -14,7 +14,8 @@ h1,h2,h3,p{margin:0}
 :focus-visible{outline:2px solid var(--gold-hi);outline-offset:2px}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .tnum{font-variant-numeric:tabular-nums}
-.serif{font-family:var(--font-display)}
+.serif{font-family:var(--font-display);font-variant-numeric:lining-nums}
+.serif.tnum{font-variant-numeric:lining-nums tabular-nums}
 
 /* screen shell */
 .screen{position:relative;max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:var(--gap-section);
@@ -24,7 +25,7 @@ h1,h2,h3,p{margin:0}
 .screen>*{position:relative}
 .ridge{position:absolute!important;top:0;left:0;width:100%;height:260px;display:block;pointer-events:none}
 .title-row{display:flex;align-items:center;justify-content:space-between}
-.h1{font-family:var(--font-display);font-size:var(--fs-h1);font-weight:600}
+.h1{font-family:var(--font-display);font-size:var(--fs-h1);font-weight:600;font-variant-numeric:lining-nums}
 .label{font-size:var(--fs-label);letter-spacing:.14em;text-transform:uppercase;color:var(--gold);font-weight:600}
 .label.wide{letter-spacing:.16em}
 .muted{color:var(--muted)}
@@ -40,18 +41,18 @@ h1,h2,h3,p{margin:0}
 /* cards */
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);padding:4px 16px 6px}
 .card-head{display:flex;align-items:center;justify-content:space-between;height:44px}
-.card-head h2{font-family:var(--font-display);font-size:var(--fs-h2);font-weight:600}
+.card-head h2{font-family:var(--font-display);font-size:var(--fs-h2);font-weight:600;font-variant-numeric:lining-nums}
 .textlink{background:none;border:0;padding:0 0 0 12px;min-height:44px;color:var(--gold);font-size:13px;font-weight:500}
 .tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-tile);padding:12px 14px;
   display:flex;flex-direction:column;gap:4px;min-width:0}
-.tile .val{font-family:var(--font-display);font-size:var(--fs-stat);font-weight:600}
+.tile .val{font-family:var(--font-display);font-size:var(--fs-stat);font-weight:600;font-variant-numeric:lining-nums}
 .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 
 /* rows */
 .row{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line-soft);width:100%;
   background:transparent;border-left:0;border-right:0;border-bottom:0;color:var(--ivory);text-align:left;min-height:44px}
 .row-icon{width:36px;height:36px;flex-shrink:0;border-radius:var(--r-icon);background:var(--gold-tint);
-  display:flex;align-items:center;justify-content:center;color:var(--gold);font-family:var(--font-display);font-weight:600;font-size:17px}
+  display:flex;align-items:center;justify-content:center;color:var(--gold);font-family:var(--font-display);font-weight:600;font-size:17px;font-variant-numeric:lining-nums}
 .row-mid{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .row-title{font-size:var(--fs-body);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row-sub{font-size:var(--fs-meta);color:var(--muted)}
@@ -124,7 +125,7 @@ select.field{padding-right:36px;background-image:none}
 .sheet-grab{touch-action:none;padding:10px 20px 0;cursor:grab}
 .sheet-handle{width:40px;height:5px;border-radius:3px;background:rgba(239,232,216,.25);margin:0 auto 6px}
 .sheet-head{display:flex;align-items:center;justify-content:space-between;min-height:44px}
-.sheet-head h2{font-family:var(--font-display);font-size:24px;font-weight:600}
+.sheet-head h2{font-family:var(--font-display);font-size:24px;font-weight:600;font-variant-numeric:lining-nums}
 .sheet-body{overflow-y:auto;overscroll-behavior:contain;padding:4px 20px calc(env(safe-area-inset-bottom) + 24px);
   display:flex;flex-direction:column;gap:14px}
 @keyframes slideup{from{transform:translateY(100%)}to{transform:none}}

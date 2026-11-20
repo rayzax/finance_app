@@ -44,11 +44,22 @@ function semiMonthlyDates(anchor: string, from: string, to: string): string[] {
   return out;
 }
 
+/**
+ * The day-of-month a MONTHLY/ANNUALLY stream keeps. Taken from lastDate (the original anchor day)
+ * when present, so a clamped predictedNextDate (e.g. Feb 28 from Jan 31) does not shift the schedule.
+ */
+function monthlyAnchorDay(s: Pick<Stream, 'lastDate'>, anchor: string): number {
+  return Number((s.lastDate ?? anchor).slice(8, 10));
+}
+
 /** The first expected occurrence: predictedNextDate, else lastDate + one period. */
 export function streamAnchor(s: Pick<Stream, 'frequency' | 'lastDate' | 'predictedNextDate'>): string | null {
   if (s.predictedNextDate) return s.predictedNextDate;
   if (s.lastDate) {
     if (s.frequency === 'SEMI_MONTHLY') return addDays(s.lastDate, 15);
+    if (s.frequency === 'MONTHLY' || s.frequency === 'ANNUALLY') {
+      return nextOccurrence(s.lastDate, s.frequency, Number(s.lastDate.slice(8, 10)));
+    }
     return nextOccurrence(s.lastDate, s.frequency);
   }
   return null;
@@ -68,7 +79,7 @@ export function occurrencesBetween(s: Pick<Stream, 'frequency' | 'lastDate' | 'p
     return out;
   }
   if (s.frequency === 'MONTHLY' || s.frequency === 'ANNUALLY') {
-    const anchorDay = Number(anchor.slice(8, 10));
+    const anchorDay = monthlyAnchorDay(s, anchor);
     const out: string[] = [];
     let d = anchor;
     for (let i = 0; i < 1000 && d <= to; i++) {
@@ -136,7 +147,7 @@ export function buildForecast(input: ForecastInput): Forecast {
 
   const weekly: Forecast['weekly'] = [];
   const hist = input.cashHistory ?? [];
-  for (let i = nPast - 1; i >= 1; i--) {
+  for (let i = nPast; i >= 1; i--) {
     const weekStart = addDays(thisWeek, -7 * i);
     const weekEnd = addDays(weekStart, 6);
     let v: number | undefined;

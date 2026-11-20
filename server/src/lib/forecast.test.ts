@@ -84,7 +84,7 @@ describe('occurrencesBetween', () => {
     ]);
   });
 
-  it.fails('projects a MONTHLY stream whose lastDate is Jan 31 onto month-end days', () => {
+  it('projects a MONTHLY stream whose lastDate is Jan 31 onto month-end days', () => {
     // BUG (forecast.ts: streamAnchor / occurrencesBetween): the fallback anchor is
     // addMonths(lastDate, 1) = Feb 28, and anchorDay is then read from that clamped
     // anchor (28), so every later occurrence drifts to the 28th: Feb 28, Mar 28, Apr 28.
@@ -266,7 +266,7 @@ describe('buildForecast', () => {
     expect(f.weekly.filter((w) => !w.projected)).toEqual([{ weekStart: '2026-11-16', value: 1000, projected: false }]);
   });
 
-  it.fails('returns 4 past weeks before the current week (spec §5)', () => {
+  it('returns 4 past weeks before the current week (spec §5)', () => {
     // BUG (forecast.ts:buildForecast, loop `for (let i = nPast - 1; i >= 1; i--)`): with
     // pastWeeks = 4 the loop runs for i = 3, 2, 1, so only 3 past weeks are emitted.
     // Spec §5 says "4 past weeks of actual end-of-week cash".

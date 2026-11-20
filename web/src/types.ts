@@ -97,3 +97,61 @@ export interface Category {
   key: string;
   label: string;
 }
+
+export type RecurringStatus = 'paid' | 'due_soon' | 'upcoming' | 'overdue';
+export interface RecurringItem {
+  id: string;
+  name: string;
+  amount: number;
+  dayOfMonth: number;
+  category: string;
+  categoryLabel: string;
+  matchMerchant: string | null;
+  active: boolean;
+  dueDate: string;
+  status: RecurringStatus;
+  paidTxId: string | null;
+  paidDate: string | null;
+}
+export interface DetectedStream {
+  streamId: string;
+  description: string;
+  averageAmount: number;
+  frequency: string;
+  predictedNextDate: string | null;
+  lastDate: string | null;
+}
+export interface RecurringCosts {
+  month: string;
+  totalMonthly: number;
+  paidCount: number;
+  paidAmount: number;
+  upcomingCount: number;
+  upcomingAmount: number;
+  items: RecurringItem[];
+  detected: DetectedStream[];
+}
+
+export type GoalPace = 'ahead' | 'on_track' | 'behind' | 'done' | 'no_date';
+export interface Goal {
+  id: string;
+  name: string;
+  targetAmount: number;
+  targetDate: string | null;
+  source: 'accounts' | 'manual';
+  accountIds: string[];
+  current: number;
+  pct: number;
+  remaining: number;
+  monthlyNeeded: number | null;
+  expectedPct: number | null;
+  pace: GoalPace;
+  projectedDate: string | null;
+  countOnlyNew: boolean;
+  manualAmount: number;
+  createdAt: string;
+}
+export interface GoalsResponse {
+  goals: Goal[];
+  summary: { totalSaved: number; totalTarget: number; onTrack: number; behind: number };
+}

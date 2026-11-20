@@ -22,6 +22,8 @@ export const col = {
   snapshots: () => db().collection('snapshots'),
   recurring: () => db().collection('recurring'),
   settings: () => db().collection('settings'),
+  recurringCosts: () => db().collection('recurringCosts'),
+  goals: () => db().collection('goals'),
 };
 
 export type ItemStatus = 'ok' | 'login_required' | 'error';
@@ -71,6 +73,31 @@ export interface TransactionDoc {
   pending: boolean;
   logoUrl: string | null;
   updatedAt: string;
+}
+
+export interface RecurringCostDoc {
+  name: string;
+  amount: number;
+  dayOfMonth: number;
+  category: string;
+  matchMerchant: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GoalDoc {
+  name: string;
+  targetAmount: number;
+  targetDate: string | null;
+  source: 'accounts' | 'manual';
+  accountIds: string[];
+  /** Sum of the linked accounts' balances when "count only new savings" was chosen; null otherwise. */
+  startingBalance: number | null;
+  manualAmount: number;
+  contributions: { date: string; amount: number }[];
+  createdAt: string;
+  archived: boolean;
 }
 
 /** Delete every doc matching a query in batches of <=400. */

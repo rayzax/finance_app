@@ -151,12 +151,23 @@ describe('login', () => {
 });
 
 describe('session enforcement on protected routes', () => {
-  const protectedGets = ['/api/auth/me', '/api/categories', '/api/summary', '/api/accounts', '/api/transactions', '/api/budgets', '/api/cashflow'];
+  const protectedGets = ['/api/auth/me', '/api/categories', '/api/summary', '/api/accounts', '/api/transactions', '/api/budgets', '/api/cashflow', '/api/goals', '/api/recurring-costs'];
 
   it.each(protectedGets)('GET %s without a cookie is 401', async (path) => {
     const res = await request(app).get(path);
     expect(res.status).toBe(401);
     expect(res.body).toEqual({ error: 'Not authenticated' });
+  });
+
+  it('new write routes need the CSRF header and validate bodies before touching the database', async () => {
+    for (const path of ['/api/goals', '/api/recurring-costs']) {
+      const noHeader = await request(app).post(path).set('Cookie', cookieHeader()).send({});
+      expect(noHeader.status).toBe(403);
+      const bad = await request(app).post(path).set(CSRF).set('Cookie', cookieHeader()).send({ name: '', amount: -1, targetAmount: 0 });
+      expect(bad.status).toBe(400);
+    }
+    const contrib = await request(app).post('/api/goals/abc/contribute').set(CSRF).set('Cookie', cookieHeader()).send({ amount: 0 });
+    expect(contrib.status).toBe(400);
   });
 
   it('a protected route with a valid cookie is reachable (categories needs no database)', async () => {

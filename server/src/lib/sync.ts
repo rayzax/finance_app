@@ -308,6 +308,9 @@ export function computeTotals(accounts: { group: string; current: number; hidden
 
 export async function writeSnapshot(date: string = todayStr()): Promise<void> {
   const snap = await col.accounts().get();
-  const totals = computeTotals(snap.docs.map((d) => d.data() as AccountDoc));
-  await col.snapshots().doc(date).set({ date, ...totals });
+  const accounts = snap.docs.map((d) => ({ id: d.id, ...(d.data() as AccountDoc) }));
+  const totals = computeTotals(accounts);
+  // Per-account balances (all accounts, hidden included) let savings goals estimate their recent rate.
+  const balances = Object.fromEntries(accounts.map((a) => [a.id, a.current]));
+  await col.snapshots().doc(date).set({ date, ...totals, balances });
 }

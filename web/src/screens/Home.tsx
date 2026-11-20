@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { greeting, liability, money, signed, splitMoney, timeAgo, todayLong } from '../format';
-import { useSummary, useSyncAll } from '../hooks';
+import { greeting, liability, money, money0, plural, signed, splitMoney, timeAgo, todayLong } from '../format';
+import { useGoals, useSummary, useSyncAll } from '../hooks';
 import { Ico, Ridge } from '../icons';
 import { usePlaid } from '../plaid';
 import type { Range } from '../types';
@@ -19,6 +19,7 @@ export default function Home() {
   const q = useSummary(range);
   const sync = useSyncAll();
   const plaid = usePlaid();
+  const goals = useGoals().data;
   const s = q.data;
 
   const header = (
@@ -86,6 +87,27 @@ export default function Home() {
             </Link>
           ))}
         </section>
+        {goals && goals.goals.length > 0 && (() => {
+          const g = goals.summary;
+          const pct = g.totalTarget > 0 ? Math.min(100, (g.totalSaved / g.totalTarget) * 100) : 0;
+          return (
+            <section className="card" aria-label="Goals" style={{ paddingBottom: 14 }}>
+              <div className="card-head">
+                <h2>Goals</h2>
+                <Link to="/wealth#goals" className="textlink" style={{ display: 'flex', alignItems: 'center' }}>View</Link>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                <span className="tnum" style={{ fontSize: 15, fontWeight: 600 }}>{money0(g.totalSaved)} <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>of {money0(g.totalTarget)}</span></span>
+                <span className="muted tnum" style={{ fontSize: 13 }}>
+                  {g.onTrack === 0 && g.behind === 0 ? plural(goals.goals.length, 'goal') : g.onTrack > 0 && `${g.onTrack} on track`}
+                  {g.onTrack > 0 && g.behind > 0 && ' · '}
+                  {g.behind > 0 && <span className="neg">{g.behind} behind</span>}
+                </span>
+              </div>
+              <div className="bar" role="img" aria-label={`${Math.round(pct)} percent of total goal targets saved`}><i style={{ width: `${pct}%` }} /></div>
+            </section>
+          );
+        })()}
         <p className="muted" style={{ fontSize: 12, textAlign: 'center' }}>
           {sync.isPending ? 'Syncing…' : `Updated ${timeAgo(s.lastSyncAt)}`}
         </p>

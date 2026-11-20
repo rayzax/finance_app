@@ -1,5 +1,7 @@
 // Pure cash-flow projection. Dates are YYYY-MM-DD strings.
+import { normalizeMerchant } from './categories';
 import { addDays, addMonths, diffDays, startOfWeek } from './dates';
+import { costKey, merchantMatches, nextDueOnOrAfter } from './recurringCosts';
 
 export type Frequency = 'WEEKLY' | 'BIWEEKLY' | 'SEMI_MONTHLY' | 'MONTHLY' | 'ANNUALLY' | 'UNKNOWN' | string;
 
@@ -13,6 +15,15 @@ export interface Stream {
   isActive?: boolean;
   status?: string;
   direction: 'in' | 'out';
+}
+
+/** A manually tracked monthly cost. `paidThisMonth` skips the current month's occurrence (cash already left the account). */
+export interface ManualCost {
+  name: string;
+  amount: number;
+  dayOfMonth: number;
+  matchMerchant?: string | null;
+  paidThisMonth?: boolean;
 }
 
 export interface Upcoming { date: string; description: string; amount: number; direction: 'in' | 'out' }
@@ -108,9 +119,37 @@ export function projectStreams(streams: Stream[], from: string, to: string): Upc
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/** Monthly outflow streams for manual costs. The day-of-month is kept in lastDate (a day-31-safe anchor) so short months clamp without drifting. */
+export function manualCostStreams(costs: ManualCost[], asOf: string): Stream[] {
+  return costs
+    .filter((c) => c.amount > 0)
+    .map((c) => ({
+      description: c.name,
+      frequency: 'MONTHLY',
+      averageAmount: c.amount,
+      direction: 'out' as const,
+      isActive: true,
+      predictedNextDate: nextDueOnOrAfter(c.dayOfMonth, asOf, !!c.paidThisMonth),
+      lastDate: `2000-01-${String(Math.min(c.dayOfMonth, 31)).padStart(2, '0')}`,
+    }));
+}
+
+/** Plaid streams plus manual costs; a Plaid outflow stream for the same merchant as a manual cost is dropped (the manual cost wins). */
+export function mergeManualCosts(streams: Stream[], costs: ManualCost[], asOf: string): Stream[] {
+  const keys = costs.flatMap((c) => [costKey(c), normalizeMerchant(c.name)]).filter(Boolean);
+  const kept = streams.filter((s) => {
+    if (s.direction !== 'out') return true;
+    const d = normalizeMerchant(s.description);
+    return !keys.some((k) => merchantMatches(d, k));
+  });
+  return [...kept, ...manualCostStreams(costs, asOf)];
+}
+
 export interface ForecastInput {
   cashNow: number;
   streams: Stream[];
+  /** Active manual recurring costs, merged into `streams` without double counting. */
+  manualCosts?: ManualCost[];
   asOf: string;
   horizonDays?: number; // default 30
   projectedWeeks?: number; // default 4
@@ -131,7 +170,8 @@ export interface Forecast {
 }
 
 export function buildForecast(input: ForecastInput): Forecast {
-  const { cashNow, streams, asOf } = input;
+  const { cashNow, asOf } = input;
+  const streams = input.manualCosts?.length ? mergeManualCosts(input.streams, input.manualCosts, asOf) : input.streams;
   const horizon = input.horizonDays ?? 30;
   const horizonDate = addDays(asOf, horizon);
   const nProj = input.projectedWeeks ?? 4;

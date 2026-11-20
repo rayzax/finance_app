@@ -8,6 +8,8 @@ import { getConfig } from './lib/config';
 import { redactPlaidError } from './lib/plaid';
 import { authRouter } from './routes/auth';
 import { dataRouter } from './routes/data';
+import { goalsRouter } from './routes/goals';
+import { recurringCostsRouter } from './routes/recurringCosts';
 import { devRouter } from './routes/dev';
 import { internalRouter, type OidcVerifier } from './routes/internal';
 import { plaidRouter, webhookRouter, type WebhookDeps } from './routes/plaid';
@@ -65,6 +67,8 @@ export function createApp(deps: AppDeps = {}): express.Express {
   app.use('/api/plaid', plaidRouter());
   app.use('/api', syncRouter());
   app.use('/api', dataRouter());
+  app.use('/api', recurringCostsRouter());
+  app.use('/api', goalsRouter());
   if (!cfg.isProduction) app.use('/api/dev', devRouter());
 
   app.use('/api', (_req, res) => { res.status(404).json({ error: 'Not found' }); });

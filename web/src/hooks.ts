@@ -1,6 +1,6 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
-import type { AccountsResponse, Budgets, Cashflow, Category, Range, Summary, TxPage } from './types';
+import type { AccountsResponse, Budgets, Cashflow, Category, GoalsResponse, Range, RecurringCosts, Summary, TxPage } from './types';
 
 export const useSummary = (range: Range) =>
   useQuery({
@@ -23,6 +23,17 @@ export const useBudgets = (month: string) =>
 
 export const useCashflow = () =>
   useQuery({ queryKey: ['cashflow'], queryFn: () => api<Cashflow>('/api/cashflow'), staleTime: 5 * 60_000 });
+
+export const useRecurringCosts = (month: string) =>
+  useQuery({
+    queryKey: ['recurring', month],
+    queryFn: () => api<RecurringCosts>(`/api/recurring-costs?month=${month}`),
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
+  });
+
+export const useGoals = () =>
+  useQuery({ queryKey: ['goals'], queryFn: () => api<GoalsResponse>('/api/goals'), staleTime: 60_000 });
 
 export const useCategories = () =>
   useQuery({ queryKey: ['categories'], queryFn: () => api<Category[]>('/api/categories'), staleTime: Infinity });

@@ -11,6 +11,7 @@ import { computeTotals, writeSnapshot } from '../lib/sync';
 import { logPlaidError, plaid, plaidErrorCode } from '../lib/plaid';
 import { decryptToken } from '../lib/crypto';
 import { loadAccounts, parseBody, round2 } from './util';
+import { loadCostsForMonth } from './recurringCosts';
 import { latestSyncAt } from './sync';
 
 export function dataRouter(): Router {
@@ -250,9 +251,13 @@ export function dataRouter(): Router {
   // ---- cashflow ----
   r.get('/cashflow', async (_req, res) => {
     const asOf = todayStr();
-    const [accounts, recSnap, snaps] = await Promise.all([
+    const [accounts, recSnap, snaps, costs] = await Promise.all([
       loadAccounts(), col.recurring().get(), col.snapshots().where('date', '>=', addDays(asOf, -35)).orderBy('date').get(),
+      loadCostsForMonth(monthOf(asOf), asOf),
     ]);
+    const manualCosts = costs.items.filter((c) => c.active).map((c) => ({
+      name: c.name, amount: c.amount, dayOfMonth: c.dayOfMonth, matchMerchant: c.matchMerchant, paidThisMonth: c.status === 'paid',
+    }));
     const cashNow = accounts.filter((a) => a.group === 'cash' && !a.hidden).reduce((s, a) => s + a.current, 0);
     const hiddenIds = new Set(accounts.filter((a) => a.hidden).map((a) => a.id));
     const streams: Stream[] = [];
@@ -263,7 +268,7 @@ export function dataRouter(): Router {
       }
     }
     const cashHistory = snaps.docs.map((d) => ({ date: String(d.data().date), cash: Number(d.data().groups?.cash ?? 0) }));
-    res.json(buildForecast({ cashNow, streams, asOf, cashHistory }));
+    res.json(buildForecast({ cashNow, streams, manualCosts, asOf, cashHistory }));
   });
 
   // ---- items ----

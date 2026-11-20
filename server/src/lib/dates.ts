@@ -81,3 +81,9 @@ export function dayLabel(date: string, today: string): string {
   if (date === addDays(today, -1)) return 'Yesterday';
   return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' }).format(parse(date));
 }
+
+/** True for a real calendar date written YYYY-MM-DD. */
+export function isDateStr(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  return fmt(parse(s)) === s;
+}

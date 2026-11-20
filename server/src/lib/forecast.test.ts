@@ -281,3 +281,56 @@ describe('buildForecast', () => {
     expect(f.weekly.filter((w) => !w.projected && w.weekStart !== '2026-11-16')).toHaveLength(4);
   });
 });
+
+describe('manual recurring costs', () => {
+  const plaidNetflix = stream({ description: 'Netflix', predictedNextDate: '2026-11-25', lastDate: '2026-10-25', averageAmount: 15 });
+  const rent = stream({ description: 'Landlord', predictedNextDate: '2026-12-01', lastDate: '2026-11-01', averageAmount: 1200 });
+
+  it('includes manual costs as monthly outflows', () => {
+    const f = buildForecast({ cashNow: 2000, streams: [], manualCosts: [{ name: 'Gym', amount: 40, dayOfMonth: 28 }], asOf: FROM });
+    expect(f.upcoming).toEqual([{ date: '2026-11-28', description: 'Gym', amount: 40, direction: 'out' }]);
+    expect(f.projected).toBe(1960);
+    expect(f.bills).toBe(1);
+  });
+
+  it('keeps the next occurrence in the following month when the day already passed', () => {
+    const f = buildForecast({ cashNow: 100, streams: [], manualCosts: [{ name: 'Gym', amount: 10, dayOfMonth: 4 }], asOf: FROM });
+    expect(f.upcoming.map((u) => u.date)).toEqual(['2026-12-04']);
+  });
+
+  it('skips the current month once the cost is already paid', () => {
+    const f = buildForecast({ cashNow: 100, streams: [], manualCosts: [{ name: 'Gym', amount: 10, dayOfMonth: 28, paidThisMonth: true }], asOf: FROM });
+    expect(f.upcoming).toEqual([]); // the next one (Dec 28) is beyond the 30-day horizon
+    expect(f.projected).toBe(100);
+  });
+
+  it('prefers the manual cost over a Plaid stream with the same merchant (no double counting)', () => {
+    const f = buildForecast({
+      cashNow: 1000, streams: [plaidNetflix], manualCosts: [{ name: 'Netflix', amount: 16, dayOfMonth: 25 }], asOf: FROM,
+    });
+    expect(f.upcoming).toEqual([{ date: '2026-11-25', description: 'Netflix', amount: 16, direction: 'out' }]);
+    expect(f.projected).toBe(984);
+  });
+
+  it('dedupes through matchMerchant against differently named Plaid streams', () => {
+    const f = buildForecast({
+      cashNow: 1000, streams: [stream({ description: 'NETFLIX.COM 866', predictedNextDate: '2026-11-25', averageAmount: 15 })],
+      manualCosts: [{ name: 'Streaming', amount: 16, dayOfMonth: 25, matchMerchant: 'netflix' }], asOf: FROM,
+    });
+    expect(f.upcoming).toHaveLength(1);
+    expect(f.upcoming[0].description).toBe('Streaming');
+  });
+
+  it('keeps unrelated Plaid streams and inflows', () => {
+    const pay = stream({ description: 'Netflix Payroll', direction: 'in', predictedNextDate: '2026-11-27', averageAmount: 900 });
+    const f = buildForecast({ cashNow: 0, streams: [rent, pay], manualCosts: [{ name: 'Netflix', amount: 16, dayOfMonth: 25 }], asOf: FROM });
+    expect(f.upcoming.map((u) => u.description).sort()).toEqual(['Landlord', 'Netflix', 'Netflix Payroll']);
+    expect(f.paydays).toBe(1);
+  });
+
+  it('does not change the forecast when there are no manual costs', () => {
+    const a = buildForecast({ cashNow: 500, streams: [rent], asOf: FROM });
+    const b = buildForecast({ cashNow: 500, streams: [rent], manualCosts: [], asOf: FROM });
+    expect(b).toEqual(a);
+  });
+});

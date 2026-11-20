@@ -59,3 +59,46 @@ DELETE /api/items/:id → {ok:true}
 PATCH /api/accounts/:id {hidden} → Account
 POST /api/dev/seed (non-production only, session required) → {ok:true, itemId}
 ```
+
+## Recurring costs and savings goals
+
+Both are session-protected, the state-changing calls need `X-Requested-With: reserve`, and bodies are zod-validated (`400 {error:"Invalid request"}`). Collections: `recurringCosts/{id}`, `goals/{id}`. Daily `snapshots/{date}` now also carry `balances: {accountId: current}` (all accounts, hidden included); goals use them for the savings rate.
+
+### Recurring costs
+```ts
+type RecurringStatus = 'paid'|'due_soon'|'upcoming'|'overdue';
+Cost = { id, name, amount /* >0 */, dayOfMonth /* 1-31, clamped to the month's length */, category /* a spend category key */,
+         categoryLabel, matchMerchant: string|null /* stored normalized, e.g. "netflix" */, active: boolean }
+
+GET /api/recurring-costs?month=YYYY-MM (default: current month in APP_TIMEZONE) → {
+  month, totalMonthly /* active costs */, paidCount, paidAmount, upcomingCount /* active and unpaid, overdue included */, upcomingAmount,
+  items: (Cost & { dueDate, status: RecurringStatus, paidTxId: string|null, paidDate: string|null })[],   // sorted by dueDate
+  detected: [{ streamId, description, averageAmount, frequency, predictedNextDate: string|null, lastDate: string|null }] }  // Plaid outflow streams not already tracked
+POST   /api/recurring-costs {name, amount, dayOfMonth, category?='bills', matchMerchant?: string|null, active?=true} → 201 Cost
+PATCH  /api/recurring-costs/:id  (any subset of the POST fields) → Cost | 404
+DELETE /api/recurring-costs/:id → {ok:true} | 404
+```
+- Paid: a transaction in that month (money out, any account) whose normalized merchant name or raw name equals, or contains on whole hyphen-delimited words, the normalized `matchMerchant` (else the normalized `name`), with amount within +/-15% of the cost. The closest amount wins.
+- Status: paid, else overdue when the due date is before today, else due_soon when within 5 days (including today), else upcoming. All dates are in APP_TIMEZONE. Inactive costs are listed but excluded from the totals and the forecast.
+- A detected stream is hidden once its normalized description matches a tracked cost.
+- `GET /api/cashflow` merges active costs into the forecast as MONTHLY outflows (next occurrence on/after today; the current month is skipped once the cost is paid). A Plaid outflow stream with the same normalized merchant is dropped (the manual cost wins).
+
+### Goals
+```ts
+type Pace = 'ahead'|'on_track'|'behind'|'done'|'no_date';
+Goal = { id, name, targetAmount, targetDate: string|null, source:'accounts'|'manual', accountIds: string[],
+         current, pct /* 0-100, capped, 1 decimal */, remaining, monthlyNeeded: number|null, expectedPct: number|null, pace: Pace,
+         projectedDate: string|null, countOnlyNew: boolean, manualAmount: number, createdAt: string }
+
+GET /api/goals → { goals: Goal[] /* not archived, oldest first */,
+                   summary: { totalSaved /* each goal capped at its target */, totalTarget, onTrack /* ahead + on_track + done */, behind } }
+POST   /api/goals {name, targetAmount, targetDate?: YYYY-MM-DD|null, source, accountIds? (required, non-empty, must exist, for 'accounts'),
+                   countOnlyNew?: boolean, manualAmount?: number>=0 (manual)} → 201 Goal
+PATCH  /api/goals/:id  (any subset of the POST fields, plus archived: boolean) → Goal | 404
+DELETE /api/goals/:id → {ok:true} | 404
+POST   /api/goals/:id/contribute {amount /* non-zero; negative = withdrawal */, date?: YYYY-MM-DD} → Goal
+         | 400 if the goal is not manual or the withdrawal exceeds the saved amount | 404
+```
+- `current`: accounts goals = sum of the linked accounts' current balances (hidden accounts allowed) minus `startingBalance`, which is captured when "count only new savings" is on (at creation, when it is switched on, or when the linked accounts change). Manual goals = `manualAmount` + the sum of contributions.
+- `expectedPct` is linear from createdAt (APP_TIMEZONE date) to targetDate. Ahead if pct >= expectedPct + 5, behind if pct < expectedPct - 5, otherwise on_track; done when current >= target; no_date without a target date. `monthlyNeeded` = remaining / months left (days / 30.4375, rounded up, at least 1); null when done or undated.
+- `projectedDate` comes from the 90-day savings rate: accounts goals use the snapshots' per-account balances plus the live balance (needs >= 7 days of history); manual goals use the contributions in the window averaged over 30-90 days. null when the rate is <= 0 or unknown, and when done. The math lives in `server/src/lib/goals.ts`.

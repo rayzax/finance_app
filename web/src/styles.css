@@ -61,6 +61,11 @@ h1,h2,h3,p{margin:0}
 .pos{color:var(--positive)}
 .neg{color:var(--over-text)}
 
+/* status tags */
+.tag{font-size:11px;font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.tag.gold{color:var(--gold)}
+.tag.soft{color:var(--muted-2)}
+
 /* controls */
 .seg{display:flex;gap:4px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-control);padding:3px}
 .seg button{flex:1;height:44px;border:0;border-radius:11px;background:transparent;color:var(--muted-2);font-size:13px;font-weight:500}
@@ -96,6 +101,10 @@ select.field{padding-right:36px;background-image:none}
 .bar{height:6px;border-radius:3px;background:var(--track);overflow:hidden}
 .bar>i{display:block;height:100%;border-radius:3px;background:var(--gold)}
 .bar>i.over{background:var(--over)}
+
+/* checkbox rows (goal account picker) */
+.check-box{width:24px;height:24px;border-radius:8px;border:1.5px solid rgba(201,168,106,.5);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#0C1411}
+.row[aria-checked="true"] .check-box{background:var(--gold);border-color:var(--gold)}
 
 /* skeleton */
 .sk{background:var(--surface-2);border-radius:8px;animation:pulse 1.4s ease-in-out infinite}

@@ -27,6 +27,8 @@ export const shortDay = (d: string) => fmt({ month: 'short', day: 'numeric' }).f
 export const chartDay = (d: string) => fmt({ month: 'short', day: 'numeric', year: 'numeric' }).format(day(d));
 export const monthLong = (ym: string) => fmt({ month: 'long' }).format(day(ym + '-15'));
 export const monthShort = (ym: string) => fmt({ month: 'short' }).format(day(ym + '-15'));
+/** YYYY-MM-DD -> "Jun 2027" */
+export const monthYearShort = (d: string) => fmt({ month: 'short', year: 'numeric' }).format(day(d));
 export const monthYear = (ym: string) => fmt({ month: 'long', year: 'numeric' }).format(day(ym + '-15'));
 
 export function currentMonth(): string {

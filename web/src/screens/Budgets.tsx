@@ -7,6 +7,7 @@ import { ErrorBanner, Loading, Skeleton } from '../components/bits';
 import { BudgetEditSheet } from '../components/BudgetEditSheet';
 import { ForecastSheet } from '../components/ForecastSheet';
 import { MonthPicker } from '../components/MonthPicker';
+import { RecurringCard } from '../components/RecurringCard';
 
 const C = 2 * Math.PI * 54;
 
@@ -95,6 +96,8 @@ export default function Budgets() {
             </section>
           </>
         )}
+
+        <RecurringCard month={month} />
 
         {cf.isPending && <Skeleton h={92} r={20} />}
         {cf.isError && <ErrorBanner message="Couldn't load the forecast." onRetry={() => cf.refetch()} />}

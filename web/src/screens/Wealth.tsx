@@ -3,10 +3,11 @@ import { useLocation, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, errMsg } from '../api';
 import { liability, money, splitMoney, timeAgo } from '../format';
-import { useAccounts, useSummary } from '../hooks';
+import { useAccounts, useGoals, useSummary } from '../hooks';
 import { usePlaid } from '../plaid';
 import type { AccountItem } from '../types';
 import { ErrorBanner, Loading, Skeleton } from '../components/bits';
+import { GoalsCard } from '../components/GoalsCard';
 
 const LIAB = new Set(['credit', 'loans']);
 
@@ -48,11 +49,13 @@ export default function Wealth() {
   const loc = useLocation();
   const acc = useAccounts();
   const sum = useSummary('1M');
+  const goals = useGoals();
   const plaid = usePlaid();
 
   useEffect(() => {
     if (loc.hash === '#connections' && acc.data) document.getElementById('connections')?.scrollIntoView();
-  }, [loc.hash, acc.data]);
+    if (loc.hash === '#goals' && acc.data && goals.data) document.getElementById('goals')?.scrollIntoView();
+  }, [loc.hash, acc.data, goals.data]);
 
   const s = sum.data;
   const groups = acc.data?.groups.filter((g) => !group || g.group === group) ?? [];
@@ -122,6 +125,8 @@ export default function Wealth() {
           </section>
         );
       })}
+
+      <GoalsCard />
 
       {acc.data && (
         <section id="connections" className="card" aria-label="Connections" style={{ scrollMarginTop: 56 }}>

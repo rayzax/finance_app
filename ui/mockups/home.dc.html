@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Alpine Reserve — Home</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#C9A86A}a:hover{color:#E2C58C}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #0C1411; color: #EFE8D8; font-family: Inter, system-ui, sans-serif; box-sizing: border-box">
+<svg viewBox="0 0 390 260" width="390" height="260" aria-hidden="true" style="position: absolute; top: 0; left: 0; display: block">
+<path d="M0 190 L60 132 L98 160 L150 96 L196 142 L238 108 L300 168 L340 128 L390 160" stroke="rgba(201,168,106,0.14)" stroke-width="1.2" fill="none"/>
+<path d="M0 214 L48 180 L110 206 L172 150 L226 190 L282 158 L338 196 L390 176" stroke="rgba(201,168,106,0.08)" stroke-width="1" fill="none"/>
+</svg>
+<div style="position: relative; display: flex; flex-direction: column; gap: 18px; padding: 56px 20px 0">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 13px; color: #9BA59E">Thursday, Nov 19</span>
+<span style="font-family: 'Cormorant Garamond', serif; font-size: 27px; font-weight: 600; color: #EFE8D8">Good evening, Drew</span>
+</div>
+<button aria-label="Profile and settings" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid rgba(201,168,106,0.45); background: rgba(201,168,106,0.08); color: #C9A86A; font-size: 14px; font-weight: 600; cursor: pointer">DS</button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: #C9A86A; font-weight: 600">Net worth</span>
+<div style="display: flex; align-items: baseline; gap: 2px">
+<span style="font-family: 'Cormorant Garamond', serif; font-size: 54px; font-weight: 500; line-height: 1; letter-spacing: -0.01em">$248,610</span>
+<span style="font-family: 'Cormorant Garamond', serif; font-size: 26px; color: #9BA59E">.42</span>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px">
+<span style="color: #8FC79F; font-weight: 600">{{delta}}</span>
+<span style="color: #9BA59E">{{deltaLabel}}</span>
+</div>
+</div>
+<svg viewBox="0 0 350 112" width="350" height="112" aria-hidden="true" style="display: block; overflow: visible">
+<path d="M0 111.5 H350" stroke="rgba(201,168,106,0.16)" stroke-width="1" fill="none"/>
+<path d="{{chartPath}}" stroke="#C9A86A" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="350" cy="28" r="4" fill="#0C1411" stroke="#E2C58C" stroke-width="2"/>
+</svg>
+<div role="group" aria-label="Chart range" style="display: flex; gap: 4px; background: rgba(239,232,216,0.04); border: 1px solid rgba(201,168,106,0.14); border-radius: 14px; padding: 3px">
+<sc-for list="{{ranges}}" as="r" hint-placeholder-count="4">
+<sc-if value="{{r.selected}}" hint-placeholder-val="{{false}}">
+<button onClick="{{r.pick}}" aria-pressed="true" style="flex: 1; height: 44px; border: 0; border-radius: 11px; background: #C9A86A; color: #0C1411; font-size: 13px; font-weight: 600; cursor: pointer">{{r.label}}</button>
+</sc-if>
+<sc-if value="{{r.notSelected}}" hint-placeholder-val="{{true}}">
+<button onClick="{{r.pick}}" aria-pressed="false" style="flex: 1; height: 44px; border: 0; border-radius: 11px; background: transparent; color: #C8CEC9; font-size: 13px; font-weight: 500; cursor: pointer">{{r.label}}</button>
+</sc-if>
+</sc-for>
+</div>
+<section aria-label="Accounts" style="background: rgba(239,232,216,0.035); border: 1px solid rgba(201,168,106,0.16); border-radius: 20px; padding: 4px 16px 6px">
+<div style="display: flex; align-items: center; justify-content: space-between; height: 44px">
+<h2 style="margin: 0; font-family: 'Cormorant Garamond', serif; font-size: 21px; font-weight: 600">Accounts</h2>
+<a href="#" style="font-size: 13px; font-weight: 500; text-decoration: none">Link account</a>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid rgba(201,168,106,0.10)">
+<span style="width: 36px; height: 36px; border-radius: 12px; background: rgba(201,168,106,0.10); display: flex; align-items: center; justify-content: center; color: #C9A86A"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h13v4"/><path d="M3 7v11a2 2 0 0 0 2 2h15V9H5a2 2 0 0 1-2-2z"/><path d="M16 14h.01"/></svg></span>
+<div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 500">Cash</span><span style="font-size: 12px; color: #9BA59E">3 accounts</span></div>
+<span style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums">$18,420.16</span>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid rgba(201,168,106,0.10)">
+<span style="width: 36px; height: 36px; border-radius: 12px; background: rgba(201,168,106,0.10); display: flex; align-items: center; justify-content: center; color: #C9A86A"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span>
+<div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 500">Investments</span><span style="font-size: 12px; color: #9BA59E">Brokerage · 2 accounts</span></div>
+<span style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums">$96,284.50</span>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid rgba(201,168,106,0.10)">
+<span style="width: 36px; height: 36px; border-radius: 12px; background: rgba(201,168,106,0.10); display: flex; align-items: center; justify-content: center; color: #C9A86A"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21v-9"/><path d="M12 12C12 7 8 5 4 5c0 4 3 7 8 7z"/><path d="M12 14c0-4 3-6 8-6 0 4-3 6-8 6z"/></svg></span>
+<div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 500">Retirement</span><span style="font-size: 12px; color: #9BA59E">401(k) · Roth IRA</span></div>
+<span style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums">$136,045.88</span>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid rgba(201,168,106,0.10)">
+<span style="width: 36px; height: 36px; border-radius: 12px; background: rgba(201,168,106,0.10); display: flex; align-items: center; justify-content: center; color: #C9A86A"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></span>
+<div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 500">Credit cards</span><span style="font-size: 12px; color: #9BA59E">Due Dec 4</span></div>
+<span style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; color: #E3B07A">−$2,140.12</span>
+</div>
+</section>
+</div>
+<nav aria-label="Main" style="position: absolute; left: 0; right: 0; bottom: 0; height: 86px; box-sizing: border-box; padding: 8px 12px 28px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: rgba(10,17,14,0.96); border-top: 1px solid rgba(201,168,106,0.16)">
+<a href="home.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 44px; text-decoration: none; color: #C9A86A; font-size: 11px; font-weight: 600"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</a>
+<a href="activity.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 44px; text-decoration: none; color: #9BA59E; font-size: 11px; font-weight: 500"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Activity</a>
+<a href="budgets.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 44px; text-decoration: none; color: #9BA59E; font-size: 11px; font-weight: 500"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12A9 9 0 1 1 12 3v9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg>Budgets</a>
+<button style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 44px; border: 0; background: transparent; color: #9BA59E; font-size: 11px; font-weight: 500; cursor: pointer"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M4 10h16M12 3 3 8h18zM6 10v8M10 10v8M14 10v8M18 10v8"/></svg>Wealth</button>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { range: '1M' };
+  }
+  renderVals() {
+    var data = {
+      '1M': { path: 'M0 80 L25 76 L50 82 L75 70 L100 72 L125 64 L150 68 L175 58 L200 60 L225 50 L250 54 L275 42 L300 46 L325 34 L350 28', delta: '+$3,214.08', label: 'past month' },
+      '3M': { path: 'M0 92 L30 86 L60 90 L90 74 L120 78 L150 66 L180 70 L210 52 L240 58 L270 44 L300 40 L330 32 L350 28', delta: '+$9,870.55', label: 'past 3 months' },
+      '1Y': { path: 'M0 100 L35 96 L70 84 L105 88 L140 72 L175 76 L210 60 L245 52 L280 56 L315 38 L350 28', delta: '+$31,402.19', label: 'past year' },
+      'All': { path: 'M0 104 L50 100 L100 94 L150 86 L200 74 L250 66 L300 48 L350 28', delta: '+$112,960.00', label: 'since you joined' }
+    };
+    var self = this;
+    var cur = data[this.state.range];
+    var ranges = ['1M', '3M', '1Y', 'All'].map(function (k) {
+      return { label: k, selected: k === self.state.range, notSelected: k !== self.state.range, pick: function () { self.setState({ range: k }); } };
+    });
+    return { ranges: ranges, chartPath: cur.path, delta: cur.delta, deltaLabel: cur.label };
+  }
+}
+</script>
+</body>
+</html>

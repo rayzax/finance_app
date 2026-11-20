@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Alpine Reserve — Budgets</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#C9A86A}a:hover{color:#E2C58C}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #0C1411; color: #EFE8D8; font-family: Inter, system-ui, sans-serif; box-sizing: border-box">
+<div style="display: flex; flex-direction: column; gap: 16px; padding: 56px 20px 0">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<h1 style="margin: 0; font-family: 'Cormorant Garamond', serif; font-size: 34px; font-weight: 600">Budgets</h1>
+<button style="height: 44px; padding: 0 14px; border-radius: 22px; border: 1px solid rgba(201,168,106,0.35); background: transparent; color: #C9A86A; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer">November<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+</div>
+<section aria-label="Month overview" style="display: flex; align-items: center; gap: 18px; background: rgba(239,232,216,0.035); border: 1px solid rgba(201,168,106,0.16); border-radius: 20px; padding: 16px">
+<svg viewBox="0 0 128 128" width="124" height="124" role="img" aria-label="71 percent of monthly budget spent" style="flex-shrink: 0; display: block">
+<circle cx="64" cy="64" r="54" fill="none" stroke="rgba(201,168,106,0.14)" stroke-width="10"/>
+<circle cx="64" cy="64" r="54" fill="none" stroke="#C9A86A" stroke-width="10" stroke-linecap="round" stroke-dasharray="240 340" transform="rotate(-90 64 64)"/>
+<text x="64" y="62" text-anchor="middle" font-family="Cormorant Garamond, serif" font-size="30" font-weight="600" fill="#EFE8D8">71%</text>
+<text x="64" y="82" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#9BA59E">spent</text>
+</svg>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #C9A86A; font-weight: 600">Left to spend</span>
+<span style="font-family: 'Cormorant Garamond', serif; font-size: 36px; font-weight: 600; line-height: 1">$1,317.60</span>
+<span style="font-size: 13px; color: #9BA59E">$3,182 of $4,500 · 11 days left</span>
+</div>
+</section>
+<section aria-label="Categories" style="background: rgba(239,232,216,0.035); border: 1px solid rgba(201,168,106,0.16); border-radius: 20px; padding: 6px 16px 10px">
+<div style="display: flex; align-items: center; justify-content: space-between; height: 42px">
+<h2 style="margin: 0; font-family: 'Cormorant Garamond', serif; font-size: 21px; font-weight: 600">Categories</h2>
+<a href="#" style="font-size: 13px; font-weight: 500; text-decoration: none">Edit</a>
+</div>
+<sc-for list="{{cats}}" as="c" hint-placeholder-count="5">
+<div style="display: flex; flex-direction: column; gap: 7px; padding: 9px 0">
+<div style="display: flex; justify-content: space-between; align-items: baseline">
+<span style="font-size: 15px; font-weight: 500">{{c.name}}</span>
+<sc-if value="{{c.over}}" hint-placeholder-val="{{false}}"><span style="font-size: 13px; font-weight: 600; color: #EE9A6E">{{c.note}}</span></sc-if>
+<sc-if value="{{c.ok}}" hint-placeholder-val="{{true}}"><span style="font-size: 13px; color: #9BA59E; font-variant-numeric: tabular-nums">{{c.note}}</span></sc-if>
+</div>
+<svg viewBox="0 0 318 6" width="318" height="6" aria-hidden="true" style="display: block">
+<rect x="0" y="0" width="318" height="6" rx="3" fill="rgba(201,168,106,0.13)"/>
+<sc-if value="{{c.over}}" hint-placeholder-val="{{false}}"><rect x="0" y="0" width="{{c.w}}" height="6" rx="3" fill="#E08A5F"/></sc-if>
+<sc-if value="{{c.ok}}" hint-placeholder-val="{{true}}"><rect x="0" y="0" width="{{c.w}}" height="6" rx="3" fill="#C9A86A"/></sc-if>
+</svg>
+</div>
+</sc-for>
+</section>
+<section aria-label="Cash flow forecast" style="display: flex; justify-content: space-between; align-items: center; background: rgba(239,232,216,0.035); border: 1px solid rgba(201,168,106,0.16); border-radius: 20px; padding: 14px 16px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #C9A86A; font-weight: 600">Cash on Dec 19</span>
+<span style="font-family: 'Cormorant Garamond', serif; font-size: 28px; font-weight: 600">$21,640</span>
+<span style="font-size: 12px; color: #9BA59E">Forecast · 4 bills, 2 paydays ahead</span>
+</div>
+<svg viewBox="0 0 96 48" width="96" height="48" aria-hidden="true" style="display: block">
+<rect x="2" y="26" width="10" height="22" rx="2" fill="rgba(239,232,216,0.55)"/>
+<rect x="18" y="20" width="10" height="28" rx="2" fill="rgba(239,232,216,0.55)"/>
+<rect x="34" y="30" width="10" height="18" rx="2" fill="rgba(239,232,216,0.55)"/>
+<rect x="50" y="14" width="10" height="34" rx="2" fill="rgba(239,232,216,0.55)"/>
+<rect x="66" y="10" width="10" height="38" rx="2" fill="#C9A86A"/>
+<rect x="82" y="4" width="10" height="44" rx="2" fill="#C9A86A"/>
+</svg>
+</section>
+</div>
+<nav aria-label="Main" style="position: absolute; left: 0; right: 0; bottom: 0; height: 86px; box-sizing: border-box; padding: 8px 12px 28px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: rgba(10,17,14,0.96); border-top: 1px solid rgba(201,168,106,0.16)">
+<a href="home.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 44px; text-decoration: none; color: #9BA59E; font-size: 11px; font-weight: 500"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</a>
+<a href="activity.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 44px; text-decoration: none; color: #9BA59E; font-size: 11px; font-weight: 500"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Activity</a>
+<a href="budgets.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 44px; text-decoration: none; color: #C9A86A; font-size: 11px; font-weight: 600"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12A9 9 0 1 1 12 3v9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg>Budgets</a>
+<button style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 44px; border: 0; background: transparent; color: #9BA59E; font-size: 11px; font-weight: 500; cursor: pointer"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M4 10h16M12 3 3 8h18zM6 10v8M10 10v8M14 10v8M18 10v8"/></svg>Wealth</button>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var raw = [
+      ['Groceries', 412, 600],
+      ['Dining out', 286, 300],
+      ['Transport', 190, 250],
+      ['Shopping', 540, 500],
+      ['Utilities', 168, 220]
+    ];
+    var cats = raw.map(function (r) {
+      var over = r[1] > r[2];
+      return {
+        name: r[0],
+        over: over,
+        ok: !over,
+        w: Math.round(Math.min(1, r[1] / r[2]) * 318),
+        note: over ? 'Over by $' + (r[1] - r[2]) : '$' + r[1] + ' / $' + r[2]
+      };
+    });
+    return { cats: cats };
+  }
+}
+</script>
+</body>
+</html>

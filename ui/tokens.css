@@ -1,0 +1,50 @@
+/* Alpine Reserve — design tokens (Option A, approved 2026-11-19) */
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600&display=swap");
+/* In the app, prefer self-hosting via @fontsource/cormorant-garamond + @fontsource/inter (no third-party font calls, simpler CSP). */
+
+:root {
+  /* Ground & surfaces */
+  --bg: #0C1411;                         /* pine-black page */
+  --bg-bar: rgba(10, 17, 14, 0.96);      /* tab bar / sticky headers */
+  --surface: rgba(239, 232, 216, 0.035); /* cards */
+  --surface-2: rgba(239, 232, 216, 0.05);/* inputs, segmented controls */
+  --line: rgba(201, 168, 106, 0.16);     /* card borders */
+  --line-soft: rgba(201, 168, 106, 0.10);/* row dividers */
+  --track: rgba(201, 168, 106, 0.13);    /* progress tracks */
+
+  /* Text */
+  --ivory: #EFE8D8;                      /* primary text */
+  --muted: #9BA59E;                      /* secondary text (7:1 on bg) */
+  --muted-2: #C8CEC9;                    /* unselected control labels */
+
+  /* Accents */
+  --gold: #C9A86A;                       /* champagne gold: primary accent */
+  --gold-hi: #E2C58C;                    /* hover / highlight */
+  --gold-tint: rgba(201, 168, 106, 0.10);/* icon tiles */
+  --positive: #8FC79F;                   /* gains, income */
+  --liability: #E3B07A;                  /* credit balances owed */
+  --over: #E08A5F;                       /* over-budget bars */
+  --over-text: #EE9A6E;                  /* over-budget labels */
+
+  /* Type */
+  --font-display: "Cormorant Garamond", Georgia, serif; /* headings, big numbers */
+  --font-ui: Inter, -apple-system, system-ui, sans-serif;
+  --fs-hero: 54px;   /* net worth */
+  --fs-h1: 34px;     /* screen titles */
+  --fs-h2: 21px;     /* card titles */
+  --fs-stat: 26px;   /* stat tiles */
+  --fs-body: 15px;   /* row titles */
+  --fs-sub: 13px;    /* secondary */
+  --fs-meta: 12px;   /* row subtitles */
+  --fs-label: 11px;  /* UPPERCASE labels, letter-spacing .14–.16em, weight 600, gold */
+
+  /* Shape & spacing */
+  --r-card: 20px;
+  --r-tile: 16px;
+  --r-control: 14px;
+  --r-icon: 12px;
+  --pad-screen: 20px;
+  --gap-section: 16px;  /* 18px on Home */
+  --tap: 44px;          /* minimum touch target */
+  --tabbar-h: 58px;     /* plus env(safe-area-inset-bottom) */
+}

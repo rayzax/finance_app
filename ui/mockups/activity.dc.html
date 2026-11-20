@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Alpine Reserve — Activity</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#C9A86A}a:hover{color:#E2C58C}
+button,input{font-family:inherit}
+input::placeholder{color:#8E9891}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #0C1411; color: #EFE8D8; font-family: Inter, system-ui, sans-serif; box-sizing: border-box">
+<div style="display: flex; flex-direction: column; gap: 16px; padding: 56px 20px 0">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<h1 style="margin: 0; font-family: 'Cormorant Garamond', serif; font-size: 34px; font-weight: 600">Activity</h1>
+<button aria-label="Export transactions" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid rgba(201,168,106,0.35); background: transparent; color: #C9A86A; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg></button>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<div style="background: rgba(239,232,216,0.035); border: 1px solid rgba(201,168,106,0.16); border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #C9A86A; font-weight: 600">Spent · Nov</span>
+<span style="font-family: 'Cormorant Garamond', serif; font-size: 26px; font-weight: 600">$3,182.40</span>
+</div>
+<div style="background: rgba(239,232,216,0.035); border: 1px solid rgba(201,168,106,0.16); border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #C9A86A; font-weight: 600">Earned · Nov</span>
+<span style="font-family: 'Cormorant Garamond', serif; font-size: 26px; font-weight: 600; color: #8FC79F">$6,940.00</span>
+</div>
+</div>
+<label style="display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 14px; border-radius: 14px; background: rgba(239,232,216,0.05); border: 1px solid rgba(201,168,106,0.14); color: #9BA59E">
+<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Search transactions</span>
+<input type="search" placeholder="Search merchants, categories" style="flex: 1; border: 0; outline: none; background: transparent; color: #EFE8D8; font-size: 15px">
+</label>
+<div role="group" aria-label="Filter" style="display: flex; gap: 8px">
+<sc-for list="{{filters}}" as="f" hint-placeholder-count="4">
+<sc-if value="{{f.selected}}" hint-placeholder-val="{{false}}">
+<button onClick="{{f.pick}}" aria-pressed="true" style="height: 44px; padding: 0 16px; border-radius: 22px; border: 1px solid #C9A86A; background: #C9A86A; color: #0C1411; font-size: 13px; font-weight: 600; cursor: pointer">{{f.label}}</button>
+</sc-if>
+<sc-if value="{{f.notSelected}}" hint-placeholder-val="{{true}}">
+<button onClick="{{f.pick}}" aria-pressed="false" style="height: 44px; padding: 0 16px; border-radius: 22px; border: 1px solid rgba(201,168,106,0.28); background: transparent; color: #C8CEC9; font-size: 13px; font-weight: 500; cursor: pointer">{{f.label}}</button>
+</sc-if>
+</sc-for>
+</div>
+<div style="display: flex; flex-direction: column; gap: 14px">
+<sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column">
+<h2 style="margin: 0 0 4px; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #9BA59E; font-weight: 600">{{g.day}}</h2>
+<sc-for list="{{g.items}}" as="t" hint-placeholder-count="2">
+<button style="display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 0; border: 0; border-bottom: 1px solid rgba(201,168,106,0.09); background: transparent; color: #EFE8D8; text-align: left; cursor: pointer">
+<span style="width: 38px; height: 38px; flex-shrink: 0; border-radius: 19px; border: 1px solid rgba(201,168,106,0.35); display: flex; align-items: center; justify-content: center; font-family: 'Cormorant Garamond', serif; font-size: 18px; font-weight: 600; color: #C9A86A">{{t.initial}}</span>
+<span style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-size: 15px; font-weight: 500">{{t.name}}</span><span style="font-size: 12px; color: #9BA59E">{{t.category}}</span></span>
+<sc-if value="{{t.income}}" hint-placeholder-val="{{false}}"><span style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; color: #8FC79F">{{t.amount}}</span></sc-if>
+<sc-if value="{{t.notIncome}}" hint-placeholder-val="{{true}}"><span style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums">{{t.amount}}</span></sc-if>
+</button>
+</sc-for>
+</div>
+</sc-for>
+</div>
+</div>
+<nav aria-label="Main" style="position: absolute; left: 0; right: 0; bottom: 0; height: 86px; box-sizing: border-box; padding: 8px 12px 28px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: rgba(10,17,14,0.96); border-top: 1px solid rgba(201,168,106,0.16)">
+<a href="home.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 44px; text-decoration: none; color: #9BA59E; font-size: 11px; font-weight: 500"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</a>
+<a href="activity.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 44px; text-decoration: none; color: #C9A86A; font-size: 11px; font-weight: 600"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Activity</a>
+<a href="budgets.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 44px; text-decoration: none; color: #9BA59E; font-size: 11px; font-weight: 500"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12A9 9 0 1 1 12 3v9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg>Budgets</a>
+<button style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 44px; border: 0; background: transparent; color: #9BA59E; font-size: 11px; font-weight: 500; cursor: pointer"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M4 10h16M12 3 3 8h18zM6 10v8M10 10v8M14 10v8M18 10v8"/></svg>Wealth</button>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { filter: 'all' };
+  }
+  renderVals() {
+    var self = this;
+    var all = [
+      { day: 'Today', items: [
+        { initial: 'P', name: 'Pearl Street Coffee', category: 'Dining', amount: '−$6.75', type: 'spend' },
+        { initial: 'W', name: 'Whole Foods Market', category: 'Groceries', amount: '−$84.12', type: 'spend' }
+      ] },
+      { day: 'Yesterday', items: [
+        { initial: 'P', name: 'Payroll Deposit', category: 'Income', amount: '+$3,470.00', type: 'income' },
+        { initial: 'S', name: 'Shell', category: 'Fuel', amount: '−$52.40', type: 'spend' },
+        { initial: 'S', name: 'Spotify', category: 'Subscriptions', amount: '−$11.99', type: 'spend' }
+      ] },
+      { day: 'Tue, Nov 17', items: [
+        { initial: 'X', name: 'Xcel Energy', category: 'Utilities', amount: '−$96.30', type: 'spend' },
+        { initial: 'T', name: 'Transfer to Savings', category: 'Transfer', amount: '−$500.00', type: 'transfer' }
+      ] }
+    ];
+    var f = this.state.filter;
+    var groups = all.map(function (g) {
+      var items = g.items.filter(function (t) { return f === 'all' || t.type === f; }).map(function (t) {
+        return Object.assign({}, t, { income: t.type === 'income', notIncome: t.type !== 'income' });
+      });
+      return { day: g.day, items: items };
+    }).filter(function (g) { return g.items.length > 0; });
+    var filters = [['all', 'All'], ['spend', 'Spending'], ['income', 'Income'], ['transfer', 'Transfers']].map(function (p) {
+      return { label: p[1], selected: p[0] === f, notSelected: p[0] !== f, pick: function () { self.setState({ filter: p[0] }); } };
+    });
+    return { filters: filters, groups: groups };
+  }
+}
+</script>
+</body>
+</html>

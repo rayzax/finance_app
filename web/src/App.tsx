@@ -8,6 +8,7 @@ import Home from './screens/Home';
 import Activity from './screens/Activity';
 import Budgets from './screens/Budgets';
 import Wealth from './screens/Wealth';
+import { PlaidProvider } from './plaid';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -60,7 +61,9 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <Routing />
+        <PlaidProvider>
+          <Routing />
+        </PlaidProvider>
       </BrowserRouter>
     </QueryClientProvider>
   );

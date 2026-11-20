@@ -9,7 +9,7 @@ export const money0 = (n: number) => (n < 0 ? '−' + usd0.format(-n) : usd0.for
 /** always-signed delta, e.g. +$3,214.08 / −$12.00 */
 export const signed = (n: number) => (neg(n) ? '−' : '+') + usd.format(Math.abs(n));
 /** liability display: −$2,140.12 */
-export const liability = (n: number) => '−' + usd.format(Math.abs(n));
+export const liability = (n: number) => (Math.abs(n) < 0.005 ? usd.format(0) : '−' + usd.format(Math.abs(n)));
 
 export function splitMoney(n: number) {
   const s = usd.format(Math.abs(n));

@@ -228,7 +228,8 @@ export function dataRouter(): Router {
       .filter((c) => c.limit > 0 || c.spent > 0)
       .sort((a, b) => b.spent - a.spent);
     const limit = round2(categories.reduce((s, c) => s + c.limit, 0));
-    const spent = round2(categories.reduce((s, c) => s + c.spent, 0));
+    // Overall spent only counts categories that have a limit, so it is comparable with `limit`.
+    const spent = round2(categories.filter((c) => c.limit > 0).reduce((s, c) => s + c.spent, 0));
     res.json({
       limit, spent, left: round2(limit - spent), pct: limit > 0 ? Math.round((spent / limit) * 100) : 0,
       daysLeft: daysLeftInMonth(month, today), categories,

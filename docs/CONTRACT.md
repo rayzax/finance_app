@@ -30,6 +30,7 @@ type ItemStatus = 'ok'|'login_required'|'error';
 POST /api/auth/login {password} → 200 {ok:true} | 401 {error:"Invalid password"} | 429
 GET  /api/auth/me → {authenticated:true}
 POST /api/sync → {ok:true, skipped?:true, lastSyncAt:string|null}
+POST /api/items/:id/sync → {ok:true, status:ItemStatus, lastSyncAt:string|null} | 404   // not debounced; web calls it after Plaid Link update-mode (reconnect) success
 GET  /api/categories (session) → [{key, label}]   // all category keys incl. income/transfer/other
 
 GET /api/summary → { netWorth, assets, liabilities, delta, deltaLabel /* "past month" | "past 3 months" | "past year" | "all time" */,
@@ -49,7 +50,7 @@ Tx = { id, date, name, merchantName, amount /* Plaid sign: + = out */, category,
        kind, pending, logoUrl, accountId, accountName, userCategory:boolean }
 
 PATCH /api/transactions/:id {category, applyToMerchant?} → Tx
-GET  /api/budgets?month=YYYY-MM → per prompt; categories cover every spend category that has a limit or any spending
+GET  /api/budgets?month=YYYY-MM → per prompt (top-level `spent` sums only categories that have a limit, so `limit`/`spent`/`left` are comparable; `pct` is an integer 0–100, can exceed 100; web derives its own ratio from spent/limit); categories cover every spend category that has a limit or any spending
 PUT  /api/budgets {limits} → {ok:true}
 GET  /api/cashflow → per prompt (upcoming[].direction = 'in'|'out', amount positive)
 POST /api/plaid/link-token {itemId?} → {link_token}

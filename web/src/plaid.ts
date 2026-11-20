@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { createContext, createElement, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { usePlaidLink, type PlaidLinkOnSuccessMetadata } from 'react-plaid-link';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, errMsg } from './api';
 
 /**
  * start()          -> link a new account
- * start(itemId)    -> update mode (Reconnect); on success we just trigger a sync
+ * start(itemId)    -> update mode (Reconnect); on success we sync that item (never debounced)
  */
-export function usePlaid() {
+function usePlaidImpl() {
   const qc = useQueryClient();
   const [token, setToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -19,7 +19,7 @@ export function usePlaid() {
       setBusy(true);
       try {
         if (itemRef.current) {
-          await api('/api/sync', { method: 'POST' });
+          await api(`/api/items/${encodeURIComponent(itemRef.current)}/sync`, { method: 'POST' });
         } else {
           await api('/api/plaid/exchange', {
             method: 'POST',
@@ -68,4 +68,19 @@ export function usePlaid() {
   }, []);
 
   return { start, busy, error, clearError: () => setError(null) };
+}
+
+// One Plaid Link instance for the whole app: usePlaidLink injects Plaid's script on every mount,
+// and loading it more than once is unsupported.
+type PlaidApi = ReturnType<typeof usePlaidImpl>;
+const PlaidContext = createContext<PlaidApi | null>(null);
+
+export function PlaidProvider({ children }: { children: ReactNode }) {
+  return createElement(PlaidContext.Provider, { value: usePlaidImpl() }, children);
+}
+
+export function usePlaid(): PlaidApi {
+  const v = useContext(PlaidContext);
+  if (!v) throw new Error('usePlaid must be used inside PlaidProvider');
+  return v;
 }

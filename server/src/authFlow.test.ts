@@ -488,14 +488,115 @@ describe('TOTP enrollment', () => {
     expect((await get('/api/categories', sessionCookie(user))).status).toBe(401);
   });
 
-  it('a user created with mustChangePassword gets the gate after enrolling', async () => {
+});
+
+describe('temporary password: change BEFORE enrolling', () => {
+  const TEMP = PASSWORD;
+  const NEW = 'a brand new passphrase';
+  const pendingOf = (res: { headers: Record<string, unknown> }) => cookiePair(cookieValue(res, PENDING_COOKIE_NAME)!);
+
+  it('login with mustChangePassword and no TOTP answers next=change_password', async () => {
     await member({ mfa: false, mustChangePassword: true });
-    const pending = await enrollPending();
-    const setup = await post('/api/auth/mfa/setup', {}, pending);
-    const en = await post('/api/auth/mfa/enable', { code: freshCode(setup.body.secret) }, pending);
-    expect(en.body.mustChangePassword).toBe(true);
-    const cookie = cookiePair(cookieValue(en, COOKIE_NAME)!);
+    const res = await login('bob', TEMP);
+    expect(res.body).toEqual({ next: 'change_password' });
+    const tok = verifyPendingToken(pendingOf(res).split('=')[1], SECRET)!;
+    expect(tok.stage).toBe('change_password');
+    expect(cookieValue(res, COOKIE_NAME)).toBeUndefined();
+  });
+
+  it('the change_password token cannot enroll, answer MFA or reach data; an enroll token is refused while the password is temporary', async () => {
+    const { user } = await member({ mfa: false, mustChangePassword: true });
+    const change = `${PENDING_COOKIE_NAME}=${createPendingToken(user.id, 'change_password', user.sessionVersion, SECRET)}`;
+    expect((await post('/api/auth/mfa/setup', {}, change)).status).toBe(401);
+    expect((await post('/api/auth/mfa/enable', { code: '123456' }, change)).status).toBe(401);
+    expect((await post('/api/auth/mfa', { code: '123456' }, change)).status).toBe(401);
+    expect((await get('/api/categories', change)).status).toBe(401);
+    // forged/early enroll token (e.g. minted before the flag was set) is useless until the password changed
+    const enroll = `${PENDING_COOKIE_NAME}=${createPendingToken(user.id, 'enroll', user.sessionVersion, SECRET)}`;
+    expect((await post('/api/auth/mfa/setup', {}, enroll)).status).toBe(401);
+    expect((await stored(user.id)).totpPendingEnc).toBeNull();
+  });
+
+  it('changes the password through the pending token (needs the temporary one), then moves to enroll with a fresh token', async () => {
+    const { user } = await member({ mfa: false, mustChangePassword: true });
+    const pending = pendingOf(await login('bob', TEMP));
+    const wrong = await post('/api/auth/password', { currentPassword: 'not the temp password', newPassword: NEW }, pending);
+    expect(wrong.status).toBe(401);
+    expect((await stored(user.id)).failedLogins).toBe(1);
+    expect((await post('/api/auth/password', { currentPassword: TEMP, newPassword: 'short' }, pending)).status).toBe(400);
+
+    const ok = await post('/api/auth/password', { currentPassword: TEMP, newPassword: NEW }, pending);
+    expect(ok.status).toBe(200);
+    expect(ok.body).toEqual({ ok: true, next: 'enroll' });
+    expect(cookieValue(ok, COOKIE_NAME)).toBeUndefined(); // still no session
+    const u = await stored(user.id);
+    expect(u).toMatchObject({ mustChangePassword: false, sessionVersion: 2, totpEnabled: false });
+    expect(verifyPendingToken(pendingOf(ok).split('=')[1], SECRET)).toMatchObject({ stage: 'enroll', sv: 2 });
+    // the old pending token is dead (sessionVersion moved) and cannot change the password again
+    expect((await post('/api/auth/password', { currentPassword: NEW, newPassword: 'yet another passphrase' }, pending)).status).toBe(401);
+
+    // continue: enroll with the new token and get a session without any password gate
+    const enroll = pendingOf(ok);
+    const setup = await post('/api/auth/mfa/setup', {}, enroll);
+    const en = await post('/api/auth/mfa/enable', { code: freshCode(setup.body.secret) }, enroll);
+    expect(en.status).toBe(200);
+    expect(en.body.mustChangePassword).toBe(false);
+    expect((await get('/api/categories', cookiePair(cookieValue(en, COOKIE_NAME)!))).status).toBe(200);
+    expect((await login('bob', TEMP)).status).toBe(401);
+  });
+
+  it('an admin who knows the temporary password cannot enroll a factor on the account', async () => {
+    const { user } = await member({ mfa: false, mustChangePassword: true });
+    const pending = pendingOf(await login('bob', TEMP));
+    expect((await post('/api/auth/mfa/setup', {}, pending)).status).toBe(401);
+    expect((await stored(user.id)).totpPendingEnc).toBeNull();
+  });
+
+  it('an enrolled user whose password was reset answers MFA first, then hits the password gate in-session', async () => {
+    const { user, totpSecret } = await member({ mustChangePassword: true });
+    expect((await login('bob', TEMP)).body).toEqual({ next: 'mfa' });
+    const cookie = await fullLogin('bob', TEMP, totpSecret);
     expect(await get('/api/categories', cookie)).toMatchObject({ status: 403, body: { error: 'password_change_required' } });
+    expect(user.id).toBeTruthy();
+  });
+
+  it('the pending change token is short-lived like the others', async () => {
+    const { user } = await member({ mfa: false, mustChangePassword: true });
+    const expired = `${PENDING_COOKIE_NAME}=${createPendingToken(user.id, 'change_password', user.sessionVersion, SECRET, -5)}`;
+    expect((await post('/api/auth/password', { currentPassword: TEMP, newPassword: NEW }, expired)).status).toBe(401);
+  });
+
+  it('bootstrap admin skips the change step', async () => {
+    expect((await login('drew', BOOT_HASH_PW)).body).toEqual({ next: 'enroll' });
+  });
+});
+
+describe('PATCH /api/auth/me (own display name)', () => {
+  it('updates displayName and initials (first + last word; single word -> first two letters)', async () => {
+    const { user } = await member();
+    const cookie = sessionCookie(user);
+    const cases: [string, string][] = [['Drew S', 'DS'], ['  maya   lin  ', 'ML'], ['Cher', 'CH'], ['Mary Jane Watson', 'MW'], ['x', 'X']];
+    for (const [name, initials] of cases) {
+      const res = await request(app).patch('/api/auth/me').set(CSRF).set('Cookie', cookie).send({ displayName: name });
+      expect(res.status, name).toBe(200);
+      expect(res.body.user).toMatchObject({ displayName: name.trim(), initials, username: 'bob', role: 'member' });
+      expect(Object.keys(res.body.user).sort()).toEqual(['displayName', 'id', 'initials', 'role', 'username']);
+      expect((await get('/api/auth/me', cookie)).body.user.initials).toBe(initials);
+    }
+    expect(logs.some((l) => l.includes('"changes":["displayName"]'))).toBe(true);
+  });
+
+  it('validates, needs a session and the CSRF header, and cannot touch other fields', async () => {
+    const { user } = await member();
+    const cookie = sessionCookie(user);
+    const patchMe = (b: unknown) => request(app).patch('/api/auth/me').set(CSRF).set('Cookie', cookie).send(b as object);
+    expect((await patchMe({ displayName: '   ' })).status).toBe(400);
+    expect((await patchMe({ displayName: 'x'.repeat(61) })).status).toBe(400);
+    expect((await patchMe({ displayName: 'Ok', role: 'admin' })).status).toBe(400);
+    expect((await patchMe({})).status).toBe(400);
+    expect((await request(app).patch('/api/auth/me').set(CSRF).send({ displayName: 'Ok' })).status).toBe(401);
+    expect((await request(app).patch('/api/auth/me').set('Cookie', cookie).send({ displayName: 'Ok' })).status).toBe(403);
+    expect((await stored(user.id)).role).toBe('member');
   });
 });
 
@@ -656,7 +757,7 @@ describe('requireAdmin and the users API', () => {
     const dup = await post('/api/users', { username: 'FRANK.z', displayName: 'Other', role: 'admin', temporaryPassword: 'Temp-Pass-12345' }, adm.cookie);
     expect(dup.status).toBe(409);
     // the new user logs in and is sent to enrollment
-    expect((await login('frank.z', 'Temp-Pass-12345')).body).toEqual({ next: 'enroll' });
+    expect((await login('frank.z', 'Temp-Pass-12345')).body).toEqual({ next: 'change_password' });
   });
 
   it('validates the create body', async () => {

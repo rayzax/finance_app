@@ -1,6 +1,8 @@
-import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import * as OTPAuth from 'otpauth';
 import QRCode from 'qrcode';
+import { getConfig } from './config';
+import { deriveKey } from './keys';
 
 export const TOTP_ISSUER = 'Reserve';
 export const TOTP_PERIOD_S = 30;
@@ -73,7 +75,10 @@ export function generateRecoveryCodes(n = RECOVERY_CODE_COUNT): string[] {
 }
 
 export const normalizeRecoveryCode = (c: string) => c.trim().toLowerCase();
-export const hashRecoveryCode = (c: string) => createHash('sha256').update(normalizeRecoveryCode(c)).digest('hex');
+/** HMAC-SHA256 (hex) under a key derived from SESSION_SECRET: a leaked users collection can't be brute-forced offline. */
+export const hashRecoveryCodeWith = (secret: string, c: string) =>
+  createHmac('sha256', deriveKey('recovery-codes', secret)).update(normalizeRecoveryCode(c)).digest('hex');
+export const hashRecoveryCode = (c: string) => hashRecoveryCodeWith(getConfig().sessionSecret, c);
 
 /** Index of the matching hash, comparing against every stored hash in constant time (no early exit). */
 export function findRecoveryCode(hashes: string[], code: string): number {

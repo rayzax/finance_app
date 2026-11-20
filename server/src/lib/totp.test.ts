@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
-  findRecoveryCode, generateRecoveryCodes, generateTotpSecret, hashRecoveryCode, otpauthUrl, qrSvg, RECOVERY_RE,
+  findRecoveryCode, generateRecoveryCodes, hashRecoveryCodeWith, generateTotpSecret, hashRecoveryCode, otpauthUrl, qrSvg, RECOVERY_RE,
   stepOf, totpAt, verifyTotp,
 } from './totp';
 
@@ -67,5 +68,15 @@ describe('recovery codes', () => {
     expect(findRecoveryCode(hashes, ` ${codes[3].toUpperCase()} `)).toBe(3);
     expect(findRecoveryCode(hashes, 'zzzz-zzzz')).toBe(-1);
     expect(findRecoveryCode([], codes[0])).toBe(-1);
+  });
+
+  it('stores HMAC-SHA256 under a SESSION_SECRET-derived key, not plain SHA-256', () => {
+    const plain = createHash('sha256').update('abcd-2345').digest('hex');
+    const a = hashRecoveryCodeWith('secret-one'.padEnd(32, 'x'), 'abcd-2345');
+    const b = hashRecoveryCodeWith('secret-two'.padEnd(32, 'x'), 'abcd-2345');
+    expect(a).toMatch(/^[0-9a-f]{64}$/);
+    expect(a).not.toBe(plain);
+    expect(a).not.toBe(b);
+    expect(hashRecoveryCodeWith('secret-one'.padEnd(32, 'x'), ' ABCD-2345 ')).toBe(a); // normalized
   });
 });

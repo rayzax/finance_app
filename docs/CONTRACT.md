@@ -61,10 +61,10 @@ POST /api/dev/seed (non-production only, session required) → {ok:true, itemId}
 
 ## Accounts and MFA
 
-Shared household data: the finance collections are not scoped by user. Roles are `admin` and `member`; only admins use `/api/users`. TOTP is required for every account. Firestore: `users/{userId}` and `usernames/{username}` → `{userId}` (uniqueness, written in one transaction). User fields: username, displayName, initials, passwordHash (bcrypt 12), role, totpSecretEnc (`kms:`/`dev:` ciphertext), totpPendingEnc (enrollment in progress), totpEnabled, totpLastStep, recoveryCodes (sha256 hex, single-use), mustChangePassword, sessionVersion, disabled, failedLogins, failedWindowStart, lockedUntil, createdAt, createdBy, lastLoginAt.
+Shared household data: the finance collections are not scoped by user. Roles are `admin` and `member`; only admins use `/api/users`. TOTP is required for every account. Firestore: `users/{userId}` and `usernames/{username}` → `{userId}` (uniqueness, written in one transaction). User fields: username, displayName, initials, passwordHash (bcrypt 12), role, totpSecretEnc (`kms:`/`dev:` ciphertext), totpPendingEnc (enrollment in progress), totpEnabled, totpLastStep, recoveryCodes (HMAC-SHA256 hex under a key derived from SESSION_SECRET with label `recovery-codes`, single-use; rotating SESSION_SECRET therefore invalidates unused recovery codes), mustChangePassword, sessionVersion, disabled, failedLogins, failedWindowStart, lockedUntil, createdAt, createdBy, lastLoginAt.
 
 Cookies (all `httpOnly; SameSite=Strict; Path=/`, `Secure` in production):
-- `reserve_pending`: 5 min, HS256 JWT `{sub, sv, stage:'mfa'|'enroll', typ:'pending', aud:'reserve:pending', jti}`. Only the `/api/auth/mfa*` routes read it.
+- `reserve_pending`: 5 min, HS256 JWT `{sub, sv, stage:'mfa'|'enroll'|'change_password', typ:'pending', aud:'reserve:pending', jti}`. Only `/api/auth/mfa*` and `/api/auth/password` read it.
 - `reserve_session`: 30 days, `{sub:userId, sv, typ:'session', aud:'reserve:session', jti}`. The two token kinds use different keys derived from `SESSION_SECRET` (HMAC with a purpose label), so neither verifies as the other.
 - `requireSession` loads the user (in-memory cache, 30 s, dropped on writes made through this instance) and rejects with 401 when the user is missing or disabled, `sv` differs from `sessionVersion`, or `totpEnabled` is false. It sets `req.user = {id, username, displayName, initials, role}`.
 
@@ -72,7 +72,8 @@ Cookies (all `httpOnly; SameSite=Strict; Path=/`, `Secure` in production):
 type AuthUser = { id; username; displayName; initials; role: 'admin'|'member' };
 type PublicUser = { id; username; displayName; role; totpEnabled: boolean; disabled: boolean; lastLoginAt: string|null; createdAt: string };
 
-POST /api/auth/login {username, password} → 200 {next:'mfa'|'enroll'} + reserve_pending
+POST /api/auth/login {username, password} → 200 {next:'mfa'|'enroll'|'change_password'} + reserve_pending
+     // 'change_password' when mustChangePassword and no TOTP yet: the temporary password must be replaced BEFORE enrolling
      | 401 {error:"Invalid username or password"} (unknown user, wrong password, disabled and locked accounts are indistinguishable) | 429
 POST /api/auth/mfa {code} (pending stage 'mfa'; code = 6-digit TOTP, +/-1 step, or a recovery code xxxx-xxxx)
      → 200 {ok:true, mustChangePassword, recoveryCodesRemaining} + reserve_session, pending cleared
@@ -82,19 +83,22 @@ POST /api/auth/mfa/setup {code?} (pending 'enroll'; or a full session, which mus
 POST /api/auth/mfa/enable {code} → 200 {ok:true, recoveryCodes:string[10] /* shown once */, mustChangePassword}
      // from 'enroll' it also sets reserve_session and clears pending | 401 {error:"Invalid code"} | 409 if setup was not called
 GET  /api/auth/me → 200 {authenticated:true, user:AuthUser, mustChangePassword} | 401
-POST /api/auth/password {currentPassword, newPassword /* 12-72 bytes */} → {ok:true}   // bumps sessionVersion, re-issues this session
+PATCH /api/auth/me {displayName /* 1-60, trimmed */} → same shape as GET (session; initials recomputed: first letters of the first and last words, or the first two letters of a single word)
+POST /api/auth/password {currentPassword, newPassword /* 12-72 bytes */} → {ok:true}   // full session: bumps sessionVersion, re-issues this session
+     // with a pending 'change_password' token (needs the temporary password): → {ok:true, next:'enroll'} + a fresh pending 'enroll' cookie, no session
 POST /api/auth/recovery-codes {code /* current TOTP */} → {recoveryCodes:string[10]}    // replaces the old set; blocked while mustChangePassword
 POST /api/auth/logout → {ok:true}   // clears both cookies
 ```
 - Brute-force limits: the per-IP login limiter (5 failed attempts / 15 min) stays. Per account, 10 failed password or MFA attempts within 15 minutes set `lockedUntil` (+15 min; a locked login answers with the same generic 401). MFA, enable, re-enroll and recovery-code regeneration also allow 5 failures per 5 minutes per pending/session token or IP (429). A completed MFA login (not a password-only success) resets the counters.
 - TOTP replay: the accepted time step is written to `totpLastStep` in a transaction; a code at a step <= the stored one is rejected. A recovery code is removed in a transaction, so only one request can spend it.
+- A temporary password (new user or admin reset) never lets anyone enroll a factor: a user with `mustChangePassword` and no TOTP gets stage `change_password`; `enroll` tokens are refused while `mustChangePassword` is set. So an admin who knows the temporary password cannot pre-enroll an authenticator. The bootstrap admin (own password) goes straight to `enroll`. A user who already has TOTP (admin password reset) answers MFA first and then meets the in-session `password_change_required` gate.
 - Enrollment: `setup` stores the new secret encrypted as pending only. An `enroll` token can never replace an enabled factor.
 
 ### Users (admin only: 401 without a session, 403 for a member)
 ```ts
 GET    /api/users → {users: PublicUser[]}
 POST   /api/users {username /* 3-32 of [a-z0-9._-], lowercased */, displayName /* 1-60 */, role, temporaryPassword /* 12-72 bytes */} → 201 PublicUser | 409 {error:"That username is taken"}
-         // mustChangePassword=true, totpEnabled=false: the person enrolls at first sign-in
+         // mustChangePassword=true, totpEnabled=false: at first sign-in the person changes the password, then enrolls
 PATCH  /api/users/:id {displayName?, role?, disabled?} → PublicUser | 404      // disabling bumps sessionVersion
 POST   /api/users/:id/reset-password {temporaryPassword} → {ok:true}          // mustChangePassword, bumps sessionVersion, clears lockout
 POST   /api/users/:id/reset-mfa → {ok:true}                                   // clears TOTP + recovery codes, bumps sessionVersion

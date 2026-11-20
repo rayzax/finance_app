@@ -9,6 +9,7 @@ import { ErrorBanner } from './bits';
 import { ChangePasswordSheet } from './ChangePassword';
 import { PeopleSheet } from './PeopleSheet';
 import { RecoveryCodesSheet } from './RecoveryCodesSheet';
+import { NameSheet } from './NameSheet';
 
 export function SettingsSheet({ lastSyncAt, onClose }: { lastSyncAt: string | null; onClose: () => void }) {
   const nav = useNavigate();
@@ -17,7 +18,7 @@ export function SettingsSheet({ lastSyncAt, onClose }: { lastSyncAt: string | nu
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
-  const [panel, setPanel] = useState<'password' | 'codes' | 'people' | null>(null);
+  const [panel, setPanel] = useState<'password' | 'codes' | 'people' | 'name' | null>(null);
   const me = useMe().data?.user;
 
   const logout = async () => {
@@ -47,6 +48,7 @@ export function SettingsSheet({ lastSyncAt, onClose }: { lastSyncAt: string | nu
   const rowBtn = { background: 'transparent', border: 0, borderTop: '1px solid var(--line-soft)' } as const;
 
   if (panel === 'password') return <ChangePasswordSheet onClose={onClose} />;
+  if (panel === 'name' && me) return <NameSheet current={me.displayName} onClose={onClose} />;
   if (panel === 'codes') return <RecoveryCodesSheet onClose={onClose} />;
   if (panel === 'people' && me) return <PeopleSheet meId={me.id} onClose={onClose} />;
 
@@ -69,6 +71,9 @@ export function SettingsSheet({ lastSyncAt, onClose }: { lastSyncAt: string | nu
             <span className="row-mid"><span className="row-title">{me.displayName}</span><span className="row-sub">@{me.username} · {me.role === 'admin' ? 'Admin' : 'Member'}</span></span>
           </div>
         )}
+        <button className="row" style={rowBtn} onClick={() => setPanel('name')}>
+          <span className="row-mid"><span className="row-title">Your name</span><span className="row-sub">{me?.displayName ?? ''}</span></span>
+        </button>
         <button className="row" style={rowBtn} onClick={() => setPanel('password')}>
           <span className="row-mid"><span className="row-title">Change password</span><span className="row-sub">Signs out your other devices</span></span>
         </button>

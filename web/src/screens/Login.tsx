@@ -5,8 +5,9 @@ import { api, ApiError } from '../api';
 import { Ridge } from '../icons';
 import type { Me } from '../types';
 import { CopyButton, RecoveryCodesView } from '../components/authBits';
+import { ChangePasswordForm } from '../components/ChangePassword';
 
-type Step = 'password' | 'mfa' | 'enroll' | 'codes';
+type Step = 'password' | 'change' | 'mfa' | 'enroll' | 'codes';
 interface Setup { otpauthUrl: string; secret: string; qrSvg: string }
 
 const expired = (m: string) => /session expired/i.test(m);
@@ -56,10 +57,10 @@ export default function Login() {
     setBusy(true);
     setErr(null);
     try {
-      const r = await api<{ next: 'mfa' | 'enroll' }>('/api/auth/login', { method: 'POST', body: { username: username.trim(), password: pw }, noRedirect: true });
+      const r = await api<{ next: 'mfa' | 'enroll' | 'change_password' }>('/api/auth/login', { method: 'POST', body: { username: username.trim(), password: pw }, noRedirect: true });
       setPw('');
       setCode('');
-      setStep(r.next);
+      setStep(r.next === 'change_password' ? 'change' : r.next);
       if (r.next === 'enroll') await loadSetup();
     } catch (ex) {
       const s = ex instanceof ApiError ? ex.status : 0;
@@ -107,6 +108,8 @@ export default function Login() {
     }
   };
 
+  const afterChange = async () => { setErr(null); setStep('enroll'); await loadSetup(); };
+
   const errEl = err && <p id="login-err" role="alert" style={{ color: 'var(--over-text)', fontSize: 13 }}>{err}</p>;
   const digits = (v: string) => v.replace(/\D/g, '').slice(0, 6);
 
@@ -130,6 +133,15 @@ export default function Login() {
           {errEl}
           <button className="btn-gold" type="submit" disabled={busy || !username.trim() || !pw}>{busy ? 'Unlocking…' : 'Unlock'}</button>
         </form>
+      )}
+
+      {step === 'change' && (
+        <div className="stack">
+          <div style={{ textAlign: 'center' }}>
+            <h2 className="serif" style={{ fontSize: 24, fontWeight: 600 }}>Choose a new password</h2>
+          </div>
+          <ChangePasswordForm forced pending onDone={afterChange} onExpired={() => backToPassword('Your sign-in timed out. Start again.')} />
+        </div>
       )}
 
       {step === 'mfa' && (

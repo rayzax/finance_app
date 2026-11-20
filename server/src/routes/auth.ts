@@ -16,7 +16,7 @@ import {
   verifyTotp,
 } from '../lib/totp';
 import {
-  newUserDoc, normalizeUsername, toAuthUser, USERNAME_RE, UsernameTakenError, type StoredUser, type UserStore,
+  deriveInitials, newUserDoc, normalizeUsername, toAuthUser, USERNAME_RE, UsernameTakenError, type StoredUser, type UserStore,
 } from '../lib/users';
 import { parseBody } from './util';
 
@@ -86,7 +86,9 @@ export function authRouter(deps: AuthRouterDeps): Router {
     const u = await store.getById(tok.userId);
     if (!u || u.disabled || u.sessionVersion !== tok.sv) return undefined;
     if (stage === 'mfa' && !u.totpEnabled) return undefined;
-    if (stage === 'enroll' && u.totpEnabled) return undefined; // an enroll token may never replace an active factor
+    if (stage !== 'mfa' && u.totpEnabled) return undefined; // enroll/change tokens may never replace an active factor
+    if (stage === 'enroll' && u.mustChangePassword) return undefined;
+    if (stage === 'change_password' && !u.mustChangePassword) return undefined;
     return u;
   }
 
@@ -163,7 +165,8 @@ export function authRouter(deps: AuthRouterDeps): Router {
       }
     }
 
-    const stage: PendingStage = user.totpEnabled ? 'mfa' : 'enroll';
+    // A temporary password must be replaced before a factor is enrolled, so whoever issued it cannot enroll theirs.
+    const stage: PendingStage = user.totpEnabled ? 'mfa' : user.mustChangePassword ? 'change_password' : 'enroll';
     setPendingCookie(res, user, stage);
     audit('login_success', { userId: user.id, username: user.username, ip: ip(req), reason: `password_ok:${stage}` });
     res.json({ next: stage });
@@ -308,16 +311,20 @@ export function authRouter(deps: AuthRouterDeps): Router {
     res.json({ authenticated: true, user: req.user, mustChangePassword: Boolean(res.locals.mustChangePassword) });
   });
 
-  r.post('/password', mw.requireSession, async (req, res) => {
+  r.post('/password', async (req, res) => {
     const body = parseBody(passwordSchema, req, res);
     if (!body) return;
-    const me = req.user!;
-    const user = (await store.getById(me.id))!;
-    if (isLocked(user, now())) {
+    // Either a pending 'change_password' token (first sign-in with a temporary password) or a full session.
+    const pending = await pendingUser(req, 'change_password');
+    const user = pending ?? (await sessionUser(req));
+    if (!user) return notSignedIn(res);
+    const keys = limitKeys(req);
+    if (mfaLimiter.blocked(...keys) || isLocked(user, now())) {
       res.status(429).json({ error: 'Too many attempts. Try again later.' });
       return;
     }
     if (!(await checkPassword(body.currentPassword, user.passwordHash))) {
+      mfaLimiter.fail(...keys);
       await recordFailure(user);
       audit('password_change_failure', { userId: user.id, username: user.username, ip: ip(req) });
       res.status(401).json({ error: 'Current password is incorrect' });
@@ -340,9 +347,24 @@ export function authRouter(deps: AuthRouterDeps): Router {
       res.status(409).json({ error: 'Account changed. Sign in again.' });
       return;
     }
-    setSessionCookie(res, out.user); // re-issue ours; every other session is now revoked
     audit('password_changed', { userId: user.id, username: user.username, ip: ip(req) });
+    if (pending) {
+      setPendingCookie(res, out.user, 'enroll'); // sessionVersion changed: re-issue, now for enrollment
+      res.json({ ok: true, next: 'enroll' });
+      return;
+    }
+    setSessionCookie(res, out.user); // re-issue ours; every other session is now revoked
     res.json({ ok: true });
+  });
+
+  r.patch('/me', mw.requireSession, async (req, res) => {
+    const body = parseBody(z.object({ displayName: z.string().trim().min(1).max(60) }).strict(), req, res);
+    if (!body) return;
+    const out = await store.mutate(req.user!.id, () => ({ patch: { displayName: body.displayName, initials: deriveInitials(body.displayName) } }));
+    mw.invalidate(req.user!.id);
+    if (!out.ok || !out.user) return void res.status(409).json({ error: 'Account changed. Sign in again.' });
+    audit('user_updated', { userId: out.user.id, username: out.user.username, actorId: out.user.id, ip: ip(req), changes: ['displayName'] });
+    res.json({ authenticated: true, user: toAuthUser(out.user), mustChangePassword: out.user.mustChangePassword });
   });
 
   r.post('/recovery-codes', mw.requireSession, mw.requirePasswordCurrent, async (req, res) => {

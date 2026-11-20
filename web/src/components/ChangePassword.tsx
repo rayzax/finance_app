@@ -8,7 +8,8 @@ import { Sheet } from './Sheet';
 const MIN = 12;
 
 /** Shared form. `forced` shows the first-sign-in copy and adds a sign-out escape. */
-function ChangePasswordForm({ forced, onDone }: { forced?: boolean; onDone: () => void }) {
+/** `pending` = first sign-in with a temporary password: there is no session yet, so no sign-out link or me refresh. */
+export function ChangePasswordForm({ forced, pending, onDone, onExpired }: { forced?: boolean; pending?: boolean; onDone: () => void; onExpired?: () => void }) {
   const qc = useQueryClient();
   const nav = useNavigate();
   const [cur, setCur] = useState('');
@@ -31,10 +32,11 @@ function ChangePasswordForm({ forced, onDone }: { forced?: boolean; onDone: () =
     setErr(null);
     try {
       await api('/api/auth/password', { method: 'POST', body: { currentPassword: cur, newPassword: pw }, noRedirect: true });
-      await qc.invalidateQueries({ queryKey: ['me'] });
+      if (!pending) await qc.invalidateQueries({ queryKey: ['me'] });
       onDone();
     } catch (ex) {
       const s = ex instanceof ApiError ? ex.status : 0;
+      if (pending && s === 401 && /session expired/i.test(ex instanceof Error ? ex.message : '')) return onExpired?.();
       setErr(s === 429 ? 'Too many attempts. Try again in a few minutes.' : ex instanceof ApiError && s < 500 ? ex.message : 'Could not change the password. Try again.');
       setCur('');
     } finally {
@@ -66,7 +68,8 @@ function ChangePasswordForm({ forced, onDone }: { forced?: boolean; onDone: () =
       </label>
       {err && <p id="pw-err" role="alert" style={{ color: 'var(--over-text)', fontSize: 13 }}>{err}</p>}
       <button className="btn-gold" type="submit" disabled={busy || !cur || !pw || !again}>{busy ? 'Saving…' : 'Change password'}</button>
-      {forced && <button type="button" className="link-btn" style={{ color: 'var(--muted-2)' }} onClick={logout}>Sign out</button>}
+      {forced && !pending && <button type="button" className="link-btn" style={{ color: 'var(--muted-2)' }} onClick={logout}>Sign out</button>}
+      {pending && onExpired && <button type="button" className="link-btn" style={{ color: 'var(--muted-2)' }} onClick={onExpired}>Back to sign in</button>}
     </form>
   );
 }

@@ -1,8 +1,9 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import type { NextFunction, Request, Response } from 'express';
 import { getConfig } from './config';
+import { deriveKey } from './keys';
 import type { AuthUser, StoredUser, UserStore } from './users';
 import { toAuthUser } from './users';
 
@@ -14,7 +15,7 @@ export const USER_CACHE_TTL_MS = 30_000;
 export const BCRYPT_COST = 12;
 export const MAX_PASSWORD_BYTES = 72; // bcrypt ignores everything past 72 bytes
 
-export type PendingStage = 'mfa' | 'enroll';
+export type PendingStage = 'mfa' | 'enroll' | 'change_password';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -35,7 +36,7 @@ const KINDS = {
 } as const;
 
 const keyFor = (kind: keyof typeof KINDS, secret: string) =>
-  createHmac('sha256', secret).update(`reserve/jwt/${KINDS[kind].typ}`).digest();
+  deriveKey(`jwt/${KINDS[kind].typ}`, secret);
 
 export function createSessionToken(userId: string, sessionVersion: number, secret: string = getConfig().sessionSecret): string {
   return jwt.sign({ sv: sessionVersion, typ: KINDS.session.typ }, keyFor('session', secret), {
@@ -73,7 +74,7 @@ export function verifySessionToken(token: string | undefined, secret: string = g
 
 export function verifyPendingToken(token: string | undefined, secret: string = getConfig().sessionSecret): { userId: string; sv: number; stage: PendingStage } | null {
   const p = verify('pending', token, secret);
-  if (!p || (p.stage !== 'mfa' && p.stage !== 'enroll')) return null;
+  if (!p || (p.stage !== 'mfa' && p.stage !== 'enroll' && p.stage !== 'change_password')) return null;
   return { userId: p.sub as string, sv: p.sv as number, stage: p.stage };
 }
 

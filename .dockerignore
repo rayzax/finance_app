@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+.git
+.github
+infra/.terraform
+infra/*.tfstate*
+.env
+.env.*
+!.env.example
+*.zip
+ui
+docs

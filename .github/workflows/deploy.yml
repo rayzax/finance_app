@@ -1,0 +1,183 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      plaid_env:
+        description: Plaid environment (default uses the PLAID_ENV repository variable)
+        type: choice
+        options:
+          - from-repo-variable
+          - sandbox
+          - production
+        default: from-repo-variable
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+  APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve Plaid environment
+        env:
+          INPUT_PLAID_ENV: ${{ inputs.plaid_env }}
+          VAR_PLAID_ENV: ${{ vars.PLAID_ENV }}
+        run: |
+          env_name="${INPUT_PLAID_ENV:-from-repo-variable}"
+          if [[ "$env_name" == "from-repo-variable" ]]; then
+            env_name="${VAR_PLAID_ENV:-sandbox}"
+          fi
+          case "$env_name" in
+            sandbox|production) ;;
+            *) echo "::error::Invalid PLAID_ENV '$env_name'"; exit 1 ;;
+          esac
+          echo "PLAID_ENV=$env_name" >> "$GITHUB_ENV"
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: infra
+        run: terraform init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
+
+      # Phase 1: Cloud Run refuses to deploy a revision that references a secret with
+      # no versions. So first create only the APIs and the secret containers (plus the
+      # generated session secret), then upsert the secret values, then do the full apply.
+      - name: Terraform apply (phase 1, APIs and secrets)
+        working-directory: infra
+        run: |
+          terraform apply -input=false -auto-approve \
+            -var "project_id=${GCP_PROJECT_ID}" \
+            -var "region=${GCP_REGION}" \
+            -var "plaid_env=${PLAID_ENV}" \
+            -var "app_domain=${APP_DOMAIN}" \
+            -target=google_project_service.apis \
+            -target=google_secret_manager_secret.external \
+            -target=google_secret_manager_secret.session \
+            -target=google_secret_manager_secret_version.session
+
+      - name: Upsert secret versions
+        env:
+          PLAID_CLIENT_ID: ${{ secrets.PLAID_CLIENT_ID }}
+          PLAID_SECRET: ${{ secrets.PLAID_SECRET }}
+          APP_PASSWORD_HASH: ${{ secrets.APP_PASSWORD_HASH }}
+        run: |
+          set -euo pipefail
+          upsert() {
+            local name="$1" val="$2"
+            if [[ -z "$val" ]]; then
+              echo "::error::GitHub secret for ${name} is not set (run scripts/set-secrets.sh)"
+              exit 1
+            fi
+            local new_hash cur_hash
+            new_hash="$(printf %s "$val" | sha256sum | cut -d' ' -f1)"
+            # Empty output (no versions yet) hashes differently from any non-empty value.
+            cur_hash="$({ gcloud secrets versions access latest --secret="$name" \
+              --project="$GCP_PROJECT_ID" 2>/dev/null || true; } | sha256sum | cut -d' ' -f1)"
+            if [[ "$new_hash" == "$cur_hash" ]]; then
+              echo "${name}: unchanged"
+            else
+              printf %s "$val" | gcloud secrets versions add "$name" \
+                --project="$GCP_PROJECT_ID" --data-file=- >/dev/null
+              echo "${name}: new version added"
+            fi
+          }
+          upsert plaid-client-id "$PLAID_CLIENT_ID"
+          upsert plaid-secret "$PLAID_SECRET"
+          upsert app-password-hash "$APP_PASSWORD_HASH"
+
+      - name: Terraform apply (phase 2, full)
+        working-directory: infra
+        run: |
+          terraform apply -input=false -auto-approve \
+            -var "project_id=${GCP_PROJECT_ID}" \
+            -var "region=${GCP_REGION}" \
+            -var "plaid_env=${PLAID_ENV}" \
+            -var "app_domain=${APP_DOMAIN}"
+
+      - name: Read Terraform outputs
+        working-directory: infra
+        run: |
+          {
+            echo "AR_REPO=$(terraform output -raw ar_repo)"
+            echo "RUN_URL=$(terraform output -raw run_service_url)"
+            echo "PUBLIC_URL=$(terraform output -raw service_url)"
+          } >> "$GITHUB_ENV"
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push image
+        run: |
+          docker build -t "${AR_REPO}:${GITHUB_SHA}" -t "${AR_REPO}:latest" .
+          docker push "${AR_REPO}:${GITHUB_SHA}"
+          docker push "${AR_REPO}:latest"
+
+      - name: Deploy to Cloud Run
+        run: |
+          # The run-id label guarantees a new revision (so rotated secrets are picked up).
+          gcloud run services update reserve \
+            --image "${AR_REPO}:${GITHUB_SHA}" \
+            --region "$GCP_REGION" \
+            --project "$GCP_PROJECT_ID" \
+            --update-labels "deploy-run=${GITHUB_RUN_ID}"
+
+      - name: Smoke test
+        run: |
+          for i in $(seq 1 10); do
+            if curl -fsS --max-time 20 "${RUN_URL}/api/health"; then
+              echo
+              exit 0
+            fi
+            echo "Attempt ${i} failed, retrying in 6s"
+            sleep 6
+          done
+          echo "::error::Smoke test failed for ${RUN_URL}/api/health"
+          exit 1
+
+      - name: Job summary
+        if: success()
+        run: |
+          {
+            echo "## Reserve deployed"
+            echo
+            echo "- URL: ${PUBLIC_URL}"
+            echo "- Run URL: ${RUN_URL}"
+            echo "- Image: \`${AR_REPO}:${GITHUB_SHA}\`"
+            echo "- Plaid environment: \`${PLAID_ENV}\`"
+            if [[ -n "${APP_DOMAIN}" ]]; then
+              echo
+              echo "### DNS records for ${APP_DOMAIN}"
+              echo
+              terraform -chdir=infra output -json domain_dns_records |
+                jq -r '.[] | "- `\(.type)` `\(.name)` -> `\(.rrdata)`"'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

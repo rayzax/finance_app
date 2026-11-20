@@ -31,7 +31,7 @@ Match them closely. Don't restyle anything.
 
 ## 2. Security model (Drew is a security engineer, so get this right)
 
-- **Single-user login.** One password, checked with `bcryptjs` against `APP_PASSWORD_HASH`, which comes from Secret Manager. Ship `npm run hash-password` to generate the hash.
+- **Login (superseded by named accounts with required TOTP MFA: see `docs/CONTRACT.md`, "Accounts and MFA").** Originally one password, checked with `bcryptjs` against `APP_PASSWORD_HASH`, which comes from Secret Manager. Ship `npm run hash-password` to generate the hash.
 - **Session.** An HS256 JWT signed with `SESSION_SECRET`, held in an `httpOnly; Secure; SameSite=Strict; Path=/` cookie, valid for 30 days. Every `/api/*` route except login, the webhook and internal sync requires it.
 - **Login rate limit.** 5 attempts per 15 minutes per IP (`express-rate-limit`, `app.set('trust proxy', 1)`). Use a constant-time compare, and return a generic error on failure.
 - **CSRF.** Rely on SameSite=Strict, and also require the `X-Requested-With: reserve` header on every state-changing request.
@@ -50,7 +50,7 @@ Match them closely. Don't restyle anything.
 - **Plaid access tokens** never reach the browser or the logs. Redact Plaid errors before logging them.
 - **Cloud Run** is publicly invocable (`allUsers`), because the app has its own login. The internal sync route is protected by OIDC verification.
 - **Least privilege.** The runtime SA gets only `datastore.user`, `secretAccessor` on its specific secrets, and `cloudkms.cryptoKeyEncrypterDecrypter` on the one key. The scheduler SA gets only `run.invoker`.
-- **Phase 2** (stub the interfaces, don't build them yet): passkeys/WebAuthn or TOTP as a second factor.
+- **Second factor:** TOTP is now built and required (see the contract). Passkeys/WebAuthn remain a possible later addition.
 
 ## 3. Plaid integration
 

@@ -9,6 +9,8 @@ export interface Config {
   plaidEnv: 'sandbox' | 'production';
   sessionSecret: string;
   appPasswordHash: string;
+  bootstrapAdminUsername: string;
+  bootstrapAdminName: string;
   firestoreDatabase: string;
   projectId: string | undefined;
   kmsKeyName: string | undefined;
@@ -41,6 +43,8 @@ export function loadConfig(env: Env = process.env): Config {
     // In dev an ephemeral secret is fine (sessions die on restart).
     sessionSecret: env.SESSION_SECRET || (isProduction ? '' : randomBytes(32).toString('hex')),
     appPasswordHash: (env.APP_PASSWORD_HASH ?? '').trim(),
+    bootstrapAdminUsername: (clean(env.BOOTSTRAP_ADMIN_USERNAME) ?? 'drew').toLowerCase(),
+    bootstrapAdminName: clean(env.BOOTSTRAP_ADMIN_NAME) ?? 'Drew',
     firestoreDatabase: env.FIRESTORE_DATABASE || 'finance',
     projectId: clean(env.GOOGLE_CLOUD_PROJECT),
     kmsKeyName: clean(env.KMS_KEY_NAME),

@@ -11,6 +11,12 @@ export function setUnauthorizedHandler(fn: (() => void) | null) {
   onUnauthorized = fn;
 }
 
+let onPasswordChangeRequired: (() => void) | null = null;
+/** Called when any request answers 403 password_change_required (routes to the change-password screen). */
+export function setPasswordChangeHandler(fn: (() => void) | null) {
+  onPasswordChangeRequired = fn;
+}
+
 interface Opts {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
@@ -36,6 +42,10 @@ export async function api<T>(path: string, opts: Opts = {}): Promise<T> {
     data = await res.json();
   } catch {
     /* empty body */
+  }
+  if (res.status === 403 && (data as { error?: string } | null)?.error === 'password_change_required') {
+    onPasswordChangeRequired?.();
+    throw new ApiError(403, 'Change your password to continue');
   }
   if (!res.ok) {
     const msg = (data as { error?: string } | null)?.error ?? `Request failed (${res.status})`;

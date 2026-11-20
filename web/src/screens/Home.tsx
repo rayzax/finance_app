@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { greeting, liability, money, money0, plural, signed, splitMoney, timeAgo, todayLong } from '../format';
-import { useGoals, useSummary, useSyncAll } from '../hooks';
+import { useGoals, useMe, useSummary, useSyncAll } from '../hooks';
 import { Ico, Ridge } from '../icons';
 import { usePlaid } from '../plaid';
 import type { Range } from '../types';
@@ -20,15 +20,17 @@ export default function Home() {
   const sync = useSyncAll();
   const plaid = usePlaid();
   const goals = useGoals().data;
+  const user = useMe().data?.user;
+  const firstName = user?.displayName.trim().split(/\s+/)[0] ?? '';
   const s = q.data;
 
   const header = (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <span style={{ fontSize: 13, color: 'var(--muted)' }}>{todayLong()}</span>
-        <h1 className="serif" style={{ fontSize: 27, fontWeight: 600 }}>{greeting()}, Drew</h1>
+        <h1 className="serif" style={{ fontSize: 27, fontWeight: 600 }}>{greeting()}{firstName ? `, ${firstName}` : ''}</h1>
       </div>
-      <button className="avatar-btn" aria-label="Profile and settings" onClick={() => setSettings(true)}>DS</button>
+      <button className="avatar-btn" aria-label="Profile and settings" onClick={() => setSettings(true)}>{user?.initials ?? ''}</button>
     </div>
   );
 

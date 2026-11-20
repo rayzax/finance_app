@@ -3,7 +3,8 @@ import path from 'node:path';
 import cookieParser from 'cookie-parser';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import helmet from 'helmet';
-import { requireCsrfHeader, requireSession } from './lib/auth';
+import { createAuthMiddleware, requireCsrfHeader } from './lib/auth';
+import { FirestoreUserStore, type UserStore } from './lib/users';
 import { getConfig } from './lib/config';
 import { redactPlaidError } from './lib/plaid';
 import { authRouter } from './routes/auth';
@@ -14,15 +15,25 @@ import { devRouter } from './routes/dev';
 import { internalRouter, type OidcVerifier } from './routes/internal';
 import { plaidRouter, webhookRouter, type WebhookDeps } from './routes/plaid';
 import { syncRouter } from './routes/sync';
+import { usersRouter } from './routes/users';
 
 export interface AppDeps {
   webhook?: WebhookDeps;
   oidcVerifier?: OidcVerifier;
   runInternalSync?: () => Promise<void>;
+  /** User persistence (default: Firestore). Tests inject MemoryUserStore. */
+  userStore?: UserStore;
+  /** Clock for TOTP windows, lockouts and the user cache (default Date.now). */
+  now?: () => number;
+  /** bcrypt cost for new password hashes (default 12; tests lower it). */
+  bcryptCost?: number;
 }
 
 export function createApp(deps: AppDeps = {}): express.Express {
   const cfg = getConfig();
+  const store = deps.userStore ?? new FirestoreUserStore();
+  const now = deps.now ?? Date.now;
+  const mw = createAuthMiddleware(store, now);
   const app = express();
   app.set('trust proxy', 1);
   app.disable('x-powered-by');
@@ -59,11 +70,15 @@ export function createApp(deps: AppDeps = {}): express.Express {
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
 
-  app.use('/api/auth', authRouter());
+  // Auth and user-management responses carry secrets (QR, recovery codes): never cacheable.
+  app.use('/api', (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
+
+  app.use('/api/auth', authRouter({ store, mw, now, bcryptCost: deps.bcryptCost }));
   app.use('/api/internal', internalRouter(deps.oidcVerifier, deps.runInternalSync));
 
   // Everything else under /api requires a session (and the CSRF header on mutations).
-  app.use('/api', requireSession, requireCsrfHeader);
+  app.use('/api', mw.requireSession, requireCsrfHeader, mw.requirePasswordCurrent);
+  app.use('/api/users', mw.requireAdmin, usersRouter({ store, mw, now, bcryptCost: deps.bcryptCost }));
   app.use('/api/plaid', plaidRouter());
   app.use('/api', syncRouter());
   app.use('/api', dataRouter());

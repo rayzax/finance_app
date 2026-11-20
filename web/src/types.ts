@@ -155,3 +155,11 @@ export interface GoalsResponse {
   goals: Goal[];
   summary: { totalSaved: number; totalTarget: number; onTrack: number; behind: number };
 }
+
+export type Role = 'admin' | 'member';
+export interface AuthUser { id: string; username: string; displayName: string; initials: string; role: Role }
+export interface Me { authenticated: true; user: AuthUser; mustChangePassword: boolean }
+export interface Person {
+  id: string; username: string; displayName: string; role: Role;
+  totpEnabled: boolean; disabled: boolean; lastLoginAt: string | null; createdAt: string;
+}

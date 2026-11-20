@@ -1,6 +1,6 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
-import type { AccountsResponse, Budgets, Cashflow, Category, GoalsResponse, Range, RecurringCosts, Summary, TxPage } from './types';
+import type { Me, Person, AccountsResponse, Budgets, Cashflow, Category, GoalsResponse, Range, RecurringCosts, Summary, TxPage } from './types';
 
 export const useSummary = (range: Range) =>
   useQuery({
@@ -60,3 +60,9 @@ export function useSyncAll() {
     onSettled: () => qc.invalidateQueries(),
   });
 }
+
+export const useMe = () =>
+  useQuery({ queryKey: ['me'], queryFn: () => api<Me>('/api/auth/me'), staleTime: 5 * 60_000 });
+
+export const usePeople = (enabled = true) =>
+  useQuery({ queryKey: ['people'], queryFn: () => api<{ users: Person[] }>('/api/users'), enabled, staleTime: 0 });

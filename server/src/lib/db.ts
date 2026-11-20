@@ -24,6 +24,8 @@ export const col = {
   settings: () => db().collection('settings'),
   recurringCosts: () => db().collection('recurringCosts'),
   goals: () => db().collection('goals'),
+  users: () => db().collection('users'),
+  usernames: () => db().collection('usernames'),
 };
 
 export type ItemStatus = 'ok' | 'login_required' | 'error';

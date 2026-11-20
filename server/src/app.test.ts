@@ -1,53 +1,35 @@
 import { createHash } from 'node:crypto';
-import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
 import { SignJWT, exportJWK, generateKeyPair, type JWK } from 'jose';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from './app';
-import { COOKIE_NAME, createSessionToken } from './lib/auth';
-import { resetConfig } from './lib/config';
+import { COOKIE_NAME, PENDING_COOKIE_NAME, createPendingToken, createSessionToken } from './lib/auth';
+import { MemoryUserStore, type StoredUser } from './lib/users';
+import {
+  BCRYPT_TEST_COST, CSRF, SECRET, baseEnv, restoreEnv, saveEnv, seedUser, sessionCookie, setEnv,
+} from './testHelpers';
 
-// Everything here is answered without Firestore: auth and CSRF run before any handler
-// touches the database, and the webhook/internal-sync paths use injected dependencies.
+// Everything here is answered without Firestore: auth and CSRF run against an in-memory user store, and the
+// webhook/internal-sync paths use injected dependencies. The full auth flow lives in authFlow.test.ts.
 
-const SECRET = 'test-session-secret-'.padEnd(64, 'x');
-const PASSWORD = 'correct horse battery staple';
-const ENV_KEYS = ['SESSION_SECRET', 'APP_PASSWORD_HASH', 'RUN_SERVICE_URL', 'SCHEDULER_SA_EMAIL', 'PUBLIC_URL', 'NODE_ENV'] as const;
-const saved: Record<string, string | undefined> = {};
-let HASH: string;
-
-const CSRF = { 'X-Requested-With': 'reserve' };
-const cookieHeader = (token = createSessionToken(SECRET)) => `${COOKIE_NAME}=${token}`;
 const b64url = (s: string) => Buffer.from(s, 'utf8').toString('base64url');
 
-function setEnv(vars: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>) {
-  for (const [k, v] of Object.entries(vars)) {
-    if (v === undefined) delete process.env[k];
-    else process.env[k] = v;
-  }
-  resetConfig();
-}
+let store: MemoryUserStore;
+let alice: StoredUser;
+const cookieHeader = () => sessionCookie(alice);
 
-beforeAll(() => {
-  for (const k of ENV_KEYS) saved[k] = process.env[k];
-  HASH = bcrypt.hashSync(PASSWORD, 4);
-  setEnv({ SESSION_SECRET: SECRET, APP_PASSWORD_HASH: HASH, RUN_SERVICE_URL: undefined, SCHEDULER_SA_EMAIL: undefined, PUBLIC_URL: undefined });
-});
+beforeAll(saveEnv);
+afterAll(restoreEnv);
 
-afterAll(() => {
-  for (const k of ENV_KEYS) {
-    if (saved[k] === undefined) delete process.env[k];
-    else process.env[k] = saved[k];
-  }
-  resetConfig();
-});
-
-// Fresh app per test: the login rate limiter is per app instance.
+// Fresh app + store per test: rate limiters are per app instance.
 let app: ReturnType<typeof createApp>;
-beforeEach(() => {
-  setEnv({ SESSION_SECRET: SECRET, APP_PASSWORD_HASH: HASH, NODE_ENV: 'test' });
-  app = createApp();
+const mkApp = (extra: Parameters<typeof createApp>[0] = {}) => createApp({ userStore: store, bcryptCost: BCRYPT_TEST_COST, ...extra });
+beforeEach(async () => {
+  baseEnv();
+  store = new MemoryUserStore();
+  alice = (await seedUser(store)).user;
+  app = mkApp();
 });
 
 describe('public routes', () => {
@@ -66,87 +48,18 @@ describe('public routes', () => {
   });
 });
 
-describe('login', () => {
-  it('sets an httpOnly, SameSite=Strict, Path=/ session cookie on success', async () => {
-    const res = await request(app).post('/api/auth/login').set(CSRF).send({ password: PASSWORD });
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ ok: true });
-    const cookie = [res.headers['set-cookie']].flat().find((c) => c.startsWith(`${COOKIE_NAME}=`));
-    expect(cookie).toBeDefined();
-    expect(cookie).toMatch(/;\s*HttpOnly/i);
-    expect(cookie).toMatch(/;\s*SameSite=Strict/i);
-    expect(cookie).toMatch(/;\s*Path=\//i);
-    expect(cookie).not.toMatch(/;\s*Secure/i); // Secure is added in production only; see the production test below
-  });
-
-  it('issues a cookie that then authenticates the session', async () => {
-    const login = await request(app).post('/api/auth/login').set(CSRF).send({ password: PASSWORD });
-    const cookie = [login.headers['set-cookie']].flat().find((c) => c.startsWith(`${COOKIE_NAME}=`))!.split(';')[0];
-    const me = await request(app).get('/api/auth/me').set('Cookie', cookie);
-    expect(me.status).toBe(200);
-    expect(me.body).toEqual({ authenticated: true });
-  });
-
-  it('returns the same generic 401 for a wrong password and sets no cookie', async () => {
-    const res = await request(app).post('/api/auth/login').set(CSRF).send({ password: 'wrong' });
-    expect(res.status).toBe(401);
-    expect(res.body).toEqual({ error: 'Invalid password' });
-    expect(res.headers['set-cookie']).toBeUndefined();
-  });
-
-  it('gives the same generic 401 when no password hash is configured', async () => {
-    setEnv({ APP_PASSWORD_HASH: '' });
-    const noHashApp = createApp();
-    const res = await request(noHashApp).post('/api/auth/login').set(CSRF).send({ password: PASSWORD });
-    expect(res.status).toBe(401);
-    expect(res.body).toEqual({ error: 'Invalid password' });
-    setEnv({ APP_PASSWORD_HASH: HASH });
-  });
-
-  it('rejects a body with an unknown field or no password with 400', async () => {
-    const missing = await request(app).post('/api/auth/login').set(CSRF).send({});
-    expect(missing.status).toBe(400);
-    const extra = await request(app).post('/api/auth/login').set(CSRF).send({ password: PASSWORD, admin: true });
-    expect(extra.status).toBe(400);
-  });
-
-  it('requires the CSRF header even with the right password', async () => {
-    const res = await request(app).post('/api/auth/login').send({ password: PASSWORD });
-    expect(res.status).toBe(403);
-    expect(res.headers['set-cookie']).toBeUndefined();
-  });
-
-  it('answers malformed JSON with 400 and does not leak parser details', async () => {
-    const res = await request(app)
-      .post('/api/auth/login')
-      .set(CSRF)
-      .set('Content-Type', 'application/json')
-      .send('{"password": ');
-    expect(res.status).toBe(400);
-    expect(res.body).toEqual({ error: 'Invalid request' });
-  });
-
-  it('rate-limits after 5 failed attempts: the 6th gets 429, even with the right password', async () => {
-    for (let i = 0; i < 5; i++) {
-      const r = await request(app).post('/api/auth/login').set(CSRF).send({ password: 'nope' });
-      expect(r.status).toBe(401);
-    }
-    const sixth = await request(app).post('/api/auth/login').set(CSRF).send({ password: 'nope' });
-    expect(sixth.status).toBe(429);
-    expect(sixth.body).toEqual({ error: 'Too many attempts. Try again later.' });
-    const correct = await request(app).post('/api/auth/login').set(CSRF).send({ password: PASSWORD });
-    expect(correct.status).toBe(429);
-  });
-
-  it('logout clears the cookie and needs the CSRF header', async () => {
+describe('logout', () => {
+  it('clears both cookies and needs the CSRF header', async () => {
     const noHeader = await request(app).post('/api/auth/logout').set('Cookie', cookieHeader());
     expect(noHeader.status).toBe(403);
 
     const res = await request(app).post('/api/auth/logout').set(CSRF).set('Cookie', cookieHeader());
     expect(res.status).toBe(200);
-    const cleared = [res.headers['set-cookie']].flat().find((c) => c.startsWith(`${COOKIE_NAME}=`));
-    expect(cleared).toMatch(new RegExp(`^${COOKIE_NAME}=;`));
-    expect(cleared).toMatch(/Expires=Thu, 01 Jan 1970/);
+    for (const name of [COOKIE_NAME, PENDING_COOKIE_NAME]) {
+      const cleared = [res.headers['set-cookie']].flat().find((c) => c.startsWith(`${name}=`));
+      expect(cleared, name).toMatch(new RegExp(`^${name}=;`));
+      expect(cleared).toMatch(/Expires=Thu, 01 Jan 1970/);
+    }
   });
 });
 
@@ -187,15 +100,17 @@ describe('session enforcement on protected routes', () => {
     expect(res.body).toEqual({ error: 'Not found' });
   });
 
-  it('rejects a missing, tampered, wrong-secret, expired or alg:none cookie with 401', async () => {
-    const valid = createSessionToken(SECRET);
-    const [h, , s] = valid.split('.');
-    const tampered = `${h}.${b64url(JSON.stringify({ sub: 'attacker', iat: 1, exp: 9999999999 }))}.${s}`;
-    const wrongSecret = createSessionToken('a-different-secret-that-is-long-enough-to-matter-0000000000000000');
-    const expired = jwt.sign({ sub: 'owner', exp: Math.floor(Date.now() / 1000) - 60 }, SECRET, { algorithm: 'HS256' });
-    const none = `${b64url(JSON.stringify({ alg: 'none', typ: 'JWT' }))}.${b64url(JSON.stringify({ sub: 'owner' }))}.`;
+  it('rejects a missing, tampered, wrong-secret, expired, alg:none or pending-typed cookie with 401', async () => {
+    const valid = createSessionToken(alice.id, alice.sessionVersion, SECRET);
+    const [h, , sig] = valid.split('.');
+    const tampered = `${h}.${b64url(JSON.stringify({ sub: 'attacker', sv: 1, iat: 1, exp: 9999999999 }))}.${sig}`;
+    const wrongSecret = createSessionToken(alice.id, alice.sessionVersion, 'a-different-secret-that-is-long-enough-to-matter-0000000000000000');
+    const expired = jwt.sign({ sub: alice.id, sv: 1, typ: 'session', exp: Math.floor(Date.now() / 1000) - 60 }, SECRET, { algorithm: 'HS256' });
+    const none = `${b64url(JSON.stringify({ alg: 'none', typ: 'JWT' }))}.${b64url(JSON.stringify({ sub: alice.id }))}.`;
+    const legacy = jwt.sign({ sub: 'owner' }, SECRET, { algorithm: 'HS256', expiresIn: 60 });
+    const pending = createPendingToken(alice.id, 'mfa', alice.sessionVersion, SECRET);
 
-    for (const token of [tampered, wrongSecret, expired, none, 'garbage']) {
+    for (const token of [tampered, wrongSecret, expired, none, legacy, pending, 'garbage']) {
       const res = await request(app).get('/api/categories').set('Cookie', `${COOKIE_NAME}=${token}`);
       expect(res.status, `token ${token.slice(0, 20)}...`).toBe(401);
     }
@@ -204,7 +119,7 @@ describe('session enforcement on protected routes', () => {
   });
 
   it('a cookie that is valid for a different server secret does not authenticate', async () => {
-    const res = await request(app).get('/api/auth/me').set('Cookie', cookieHeader(createSessionToken('other')));
+    const res = await request(app).get('/api/auth/me').set('Cookie', `${COOKIE_NAME}=${createSessionToken(alice.id, alice.sessionVersion, 'other')}`);
     expect(res.status).toBe(401);
   });
 });
@@ -243,36 +158,28 @@ describe('CSRF header on state-changing requests', () => {
 });
 
 describe('production cookie flags', () => {
-  it('marks the session cookie Secure in production', async () => {
-    setEnv({ NODE_ENV: 'production', SESSION_SECRET: SECRET, APP_PASSWORD_HASH: HASH });
-    try {
-      const prodApp = createApp();
-      const res = await request(prodApp).post('/api/auth/login').set(CSRF).send({ password: PASSWORD });
-      expect(res.status).toBe(200);
-      const cookie = [res.headers['set-cookie']].flat().find((c) => c.startsWith(`${COOKIE_NAME}=`))!;
-      expect(cookie).toMatch(/;\s*Secure/i);
-      expect(cookie).toMatch(/;\s*HttpOnly/i);
-      expect(cookie).toMatch(/;\s*SameSite=Strict/i);
-    } finally {
-      setEnv({ NODE_ENV: 'test' });
-    }
+  it('marks the pending cookie Secure, HttpOnly and SameSite=Strict in production', async () => {
+    baseEnv({ NODE_ENV: 'production' });
+    const prodApp = mkApp();
+    const res = await request(prodApp).post('/api/auth/login').set(CSRF).send({ username: 'alice', password: 'correct horse battery staple' });
+    expect(res.status).toBe(200);
+    const cookie = [res.headers['set-cookie']].flat().find((c) => c.startsWith(`${PENDING_COOKIE_NAME}=`))!;
+    expect(cookie).toMatch(/;\s*Secure/i);
+    expect(cookie).toMatch(/;\s*HttpOnly/i);
+    expect(cookie).toMatch(/;\s*SameSite=Strict/i);
   });
 
   it('does not mount the dev-only routes in production', async () => {
-    setEnv({ NODE_ENV: 'production', SESSION_SECRET: SECRET, APP_PASSWORD_HASH: HASH });
-    try {
-      const prodApp = createApp();
-      const res = await request(prodApp).post('/api/dev/seed').set('Cookie', cookieHeader()).set(CSRF);
-      expect(res.status).toBe(404);
-    } finally {
-      setEnv({ NODE_ENV: 'test' });
-    }
+    baseEnv({ NODE_ENV: 'production' });
+    const prodApp = mkApp();
+    const res = await request(prodApp).post('/api/dev/seed').set('Cookie', cookieHeader()).set(CSRF);
+    expect(res.status).toBe(404);
   });
 });
 
 describe('body limits and error handling', () => {
   it('rejects bodies over 100kb with 400 and a generic message', async () => {
-    const big = JSON.stringify({ password: 'x'.repeat(200 * 1024) });
+    const big = JSON.stringify({ username: 'alice', password: 'x'.repeat(200 * 1024) });
     const res = await request(app).post('/api/auth/login').set(CSRF).set('Content-Type', 'application/json').send(big);
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'Invalid request' });
@@ -284,7 +191,7 @@ describe('internal sync route (OIDC-verified scheduler)', () => {
 
   it('returns 503 when internal sync is not configured', async () => {
     const run = vi.fn(async () => {});
-    const res = await request(createApp({ runInternalSync: run })).post('/api/internal/sync').set('Authorization', 'Bearer x');
+    const res = await request(mkApp({ runInternalSync: run })).post('/api/internal/sync').set('Authorization', 'Bearer x');
     expect(res.status).toBe(503);
     expect(run).not.toHaveBeenCalled();
   });
@@ -296,7 +203,7 @@ describe('internal sync route (OIDC-verified scheduler)', () => {
 
     it('rejects a request with no bearer token', async () => {
       const run = vi.fn(async () => {});
-      const res = await request(createApp({ runInternalSync: run })).post('/api/internal/sync');
+      const res = await request(mkApp({ runInternalSync: run })).post('/api/internal/sync');
       expect(res.status).toBe(401);
       expect(run).not.toHaveBeenCalled();
     });
@@ -304,7 +211,7 @@ describe('internal sync route (OIDC-verified scheduler)', () => {
     it('rejects a token that verifies but belongs to another service account', async () => {
       const run = vi.fn(async () => {});
       const verifier = vi.fn(async () => ({ email: 'attacker@evil.iam.gserviceaccount.com', email_verified: true }));
-      const res = await request(createApp({ oidcVerifier: verifier, runInternalSync: run }))
+      const res = await request(mkApp({ oidcVerifier: verifier, runInternalSync: run }))
         .post('/api/internal/sync').set('Authorization', 'Bearer t');
       expect(res.status).toBe(401);
       expect(run).not.toHaveBeenCalled();
@@ -313,7 +220,7 @@ describe('internal sync route (OIDC-verified scheduler)', () => {
     it('rejects an unverified email claim', async () => {
       const run = vi.fn(async () => {});
       const verifier = vi.fn(async () => ({ email: SCHEDULER, email_verified: false }));
-      const res = await request(createApp({ oidcVerifier: verifier, runInternalSync: run }))
+      const res = await request(mkApp({ oidcVerifier: verifier, runInternalSync: run }))
         .post('/api/internal/sync').set('Authorization', 'Bearer t');
       expect(res.status).toBe(401);
       expect(run).not.toHaveBeenCalled();
@@ -322,7 +229,7 @@ describe('internal sync route (OIDC-verified scheduler)', () => {
     it('rejects when the verifier throws', async () => {
       const run = vi.fn(async () => {});
       const verifier = vi.fn(async () => { throw new Error('bad token'); });
-      const res = await request(createApp({ oidcVerifier: verifier, runInternalSync: run }))
+      const res = await request(mkApp({ oidcVerifier: verifier, runInternalSync: run }))
         .post('/api/internal/sync').set('Authorization', 'Bearer t');
       expect(res.status).toBe(401);
       expect(run).not.toHaveBeenCalled();
@@ -331,7 +238,7 @@ describe('internal sync route (OIDC-verified scheduler)', () => {
     it('runs the sync for the scheduler service account and audience-checks the token', async () => {
       const run = vi.fn(async () => {});
       const verifier = vi.fn(async () => ({ email: SCHEDULER, email_verified: true }));
-      const res = await request(createApp({ oidcVerifier: verifier, runInternalSync: run }))
+      const res = await request(mkApp({ oidcVerifier: verifier, runInternalSync: run }))
         .post('/api/internal/sync').set('Authorization', 'Bearer good-token');
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ ok: true });
@@ -351,7 +258,7 @@ describe('Plaid webhook route (raw body, signature-verified)', () => {
     jwk = { ...(await exportJWK(signing.publicKey)), kid: 'wh-1', alg: 'ES256', use: 'sig' };
   });
 
-  const webhookApp = () => createApp({ webhook: { getKey: async () => jwk } });
+  const webhookApp = () => mkApp({ webhook: { getKey: async () => jwk } });
 
   const sign = (body: string, claimedBody = body) =>
     new SignJWT({ request_body_sha256: sha(claimedBody) })

@@ -1,6 +1,6 @@
 # Reserve
 
-A private, single-user personal finance app (iPhone-first PWA) on GCP. Bank data comes from Plaid. React + Vite frontend and an Express API ship as one container on Cloud Run. Everything is Terraform, and deploys are one click from GitHub Actions with no JSON keys.
+A private personal finance app for one household (iPhone-first PWA) on GCP. Bank data comes from Plaid. React + Vite frontend and an Express API ship as one container on Cloud Run. Everything is Terraform, and deploys are one click from GitHub Actions with no JSON keys.
 
 ## Deploy to a fresh GCP project
 
@@ -56,12 +56,24 @@ Requirements: Node 22, `gcloud` with the Firestore emulator component (`gcloud c
 
 ```bash
 cp .env.example .env            # fill in Plaid sandbox keys, hash, DEV_ENCRYPTION_KEY (openssl rand -hex 32)
+                                # first sign-in: username BOOTSTRAP_ADMIN_USERNAME + that password, then enroll an authenticator
 (cd server && npm ci && npm run hash-password)   # paste the output into APP_PASSWORD_HASH
 (cd web && npm ci)
 scripts/dev.sh
 ```
 
 `scripts/dev.sh` starts the emulator (:8081), the API (:8080, `tsx watch`) and Vite (:5173, proxying `/api`), and stops them all on Ctrl-C. With `KMS_KEY_NAME` unset, Plaid tokens are encrypted with AES-256-GCM using `DEV_ENCRYPTION_KEY`. In non-production, `POST /api/dev/seed` links a Plaid sandbox item.
+
+## Accounts & MFA
+
+Everyone in the household sees the same finance data; accounts only control who can sign in. Roles: `admin` (can manage people) and `member` (can use the whole app). **TOTP two-step sign-in is required for every account.**
+
+- **First sign-in (bootstrap).** While the `users` collection is empty, signing in as `BOOTSTRAP_ADMIN_USERNAME` (default `drew`) with the password behind `APP_PASSWORD_HASH` creates that account as an admin (`BOOTSTRAP_ADMIN_NAME`, default `Drew`) and goes straight to authenticator setup. Scan the QR code, enter the code, and save the ten recovery codes (shown once). Once any user exists, `APP_PASSWORD_HASH` is ignored for login; leave the secret in place, nothing in the infra changes.
+- **Adding people.** Settings > People > Add person (admins only). You get a generated temporary password to pass on out of band. At their first sign-in they set up their authenticator and then must choose their own password.
+- **Lost phone.** Sign in with a recovery code (each works once), or an admin uses People > Reset two-step sign-in, and the person re-enrolls at next sign-in. Admins can also reset a password. Settings > Recovery codes issues a fresh set (needs a current authenticator code).
+- **Revoking access.** Disabling, deleting or resetting a person (and changing a password) bumps their `sessionVersion`, which signs out every device within 30 seconds at most. Rotating `SESSION_SECRET` still signs out everyone.
+- **Storage.** `users/{id}` plus `usernames/{username}` (uniqueness, via a transaction). Passwords are bcrypt cost 12. TOTP secrets are encrypted with the same KMS key as the Plaid tokens (`kms:` prefix; AES-GCM with `DEV_ENCRYPTION_KEY` in dev). Recovery codes are stored only as SHA-256 hashes. Auth events are logged as structured JSON (ids, usernames, IP), never passwords, codes or secrets.
+- **Not recoverable by design:** if the only admin loses both their authenticator and their recovery codes, delete the `users` and `usernames` documents in Firestore; the bootstrap login then works again.
 
 ## Plaid environments
 
@@ -70,7 +82,7 @@ scripts/dev.sh
 
 ## Security model
 
-- One password, bcrypt-checked against `APP_PASSWORD_HASH`; HS256 session JWT in an `httpOnly; Secure; SameSite=Strict` cookie (30 days). Login is limited to 5 attempts per 15 minutes per IP. State-changing requests also need `X-Requested-With: reserve`.
+- Named accounts with required TOTP MFA (see [Accounts & MFA](#accounts--mfa)); HS256 session JWT in an `httpOnly; Secure; SameSite=Strict` cookie (30 days), revocable per user. Login is limited to 5 failed attempts per 15 minutes per IP and 10 per account. State-changing requests also need `X-Requested-With: reserve`.
 - `helmet` with a CSP limited to what Plaid Link needs, plus HSTS.
 - Plaid webhooks are verified (ES256 JWT, `iat` age, SHA-256 of the raw body). `/api/internal/sync` accepts only an OIDC token from the scheduler service account with the service URL as audience.
 - Plaid `access_token`s are encrypted with Cloud KMS (key `plaid-tokens`, 90-day rotation) before they reach Firestore, and are never sent to the browser or logged.

@@ -3,9 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, errMsg } from '../api';
 import { timeAgo } from '../format';
-import { useSyncAll } from '../hooks';
+import { useMe, useSyncAll } from '../hooks';
 import { Sheet } from './Sheet';
 import { ErrorBanner } from './bits';
+import { ChangePasswordSheet } from './ChangePassword';
+import { PeopleSheet } from './PeopleSheet';
+import { RecoveryCodesSheet } from './RecoveryCodesSheet';
 
 export function SettingsSheet({ lastSyncAt, onClose }: { lastSyncAt: string | null; onClose: () => void }) {
   const nav = useNavigate();
@@ -14,6 +17,8 @@ export function SettingsSheet({ lastSyncAt, onClose }: { lastSyncAt: string | nu
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
+  const [panel, setPanel] = useState<'password' | 'codes' | 'people' | null>(null);
+  const me = useMe().data?.user;
 
   const logout = async () => {
     try {
@@ -41,6 +46,10 @@ export function SettingsSheet({ lastSyncAt, onClose }: { lastSyncAt: string | nu
 
   const rowBtn = { background: 'transparent', border: 0, borderTop: '1px solid var(--line-soft)' } as const;
 
+  if (panel === 'password') return <ChangePasswordSheet onClose={onClose} />;
+  if (panel === 'codes') return <RecoveryCodesSheet onClose={onClose} />;
+  if (panel === 'people' && me) return <PeopleSheet meId={me.id} onClose={onClose} />;
+
   return (
     <Sheet title="Settings" onClose={onClose}>
       {err && <ErrorBanner message={err} />}
@@ -55,6 +64,22 @@ export function SettingsSheet({ lastSyncAt, onClose }: { lastSyncAt: string | nu
         <button className="row" style={rowBtn} onClick={() => { onClose(); nav('/wealth#connections'); }}>
           <span className="row-mid"><span className="row-title">Connections</span><span className="row-sub">Linked institutions</span></span>
         </button>
+        {me && (
+          <div className="row" role="group" aria-label="Signed in as">
+            <span className="row-mid"><span className="row-title">{me.displayName}</span><span className="row-sub">@{me.username} · {me.role === 'admin' ? 'Admin' : 'Member'}</span></span>
+          </div>
+        )}
+        <button className="row" style={rowBtn} onClick={() => setPanel('password')}>
+          <span className="row-mid"><span className="row-title">Change password</span><span className="row-sub">Signs out your other devices</span></span>
+        </button>
+        <button className="row" style={rowBtn} onClick={() => setPanel('codes')}>
+          <span className="row-mid"><span className="row-title">Recovery codes</span><span className="row-sub">Generate a new set</span></span>
+        </button>
+        {me?.role === 'admin' && (
+          <button className="row" style={rowBtn} onClick={() => setPanel('people')}>
+            <span className="row-mid"><span className="row-title">People</span><span className="row-sub">Add and manage who can sign in</span></span>
+          </button>
+        )}
         <div className="row" role="group" aria-label="Appearance">
           <span className="row-mid"><span className="row-title">Appearance</span></span>
           <span className="row-sub">Alpine</span>

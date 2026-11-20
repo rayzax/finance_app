@@ -1,7 +1,10 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
-import { api, ApiError, setUnauthorizedHandler } from './api';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ApiError, setPasswordChangeHandler, setUnauthorizedHandler } from './api';
+import { useMe } from './hooks';
+import { ChangePasswordScreen } from './components/ChangePassword';
+import type { Me } from './types';
 import { TabBar } from './components/TabBar';
 import Login from './screens/Login';
 import Home from './screens/Home';
@@ -21,11 +24,12 @@ const queryClient = new QueryClient({
 });
 
 function Shell() {
-  const me = useQuery({ queryKey: ['me'], queryFn: () => api<{ authenticated: boolean }>('/api/auth/me'), staleTime: 5 * 60_000 });
+  const me = useMe();
   const loc = useLocation();
   // scroll to top on tab switch (no animation), unless jumping to an anchor
   useEffect(() => { if (!loc.hash) window.scrollTo(0, 0); }, [loc.pathname, loc.hash]);
   if (!me.data) return null;
+  if (me.data.mustChangePassword) return <ChangePasswordScreen />;
   return (
     <>
       <Outlet />
@@ -41,7 +45,10 @@ function Routing() {
       queryClient.clear();
       if (window.location.pathname !== '/login') nav('/login', { replace: true });
     });
-    return () => setUnauthorizedHandler(null);
+    setPasswordChangeHandler(() => {
+      queryClient.setQueryData<Me>(['me'], (m) => (m ? { ...m, mustChangePassword: true } : m));
+    });
+    return () => { setUnauthorizedHandler(null); setPasswordChangeHandler(null); };
   }, [nav]);
   return (
     <Routes>

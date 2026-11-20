@@ -10,15 +10,15 @@ The source of truth is `CLAUDE_CODE_PROMPT.md` plus `ui/`. This file pins down t
 - Listen on `process.env.PORT || 8080`.
 
 ## Environment variables (server)
-`NODE_ENV, PORT, PLAID_CLIENT_ID, PLAID_SECRET, PLAID_ENV (sandbox|production), SESSION_SECRET, APP_PASSWORD_HASH, GOOGLE_CLOUD_PROJECT, FIRESTORE_DATABASE (default "finance"), FIRESTORE_EMULATOR_HOST (dev), KMS_KEY_NAME (full resource name of the key; unset → dev crypto), DEV_ENCRYPTION_KEY (64 hex chars = 32 bytes), APP_TIMEZONE (default America/Denver), PUBLIC_URL (public base URL, e.g. https://reserve.example.com or the run.app URL), RUN_SERVICE_URL (the run.app URL), SCHEDULER_SA_EMAIL, STATIC_DIR`
+`NODE_ENV, PORT, BOOTSTRAP_ADMIN_USERNAME (default "drew"), BOOTSTRAP_ADMIN_NAME (default "Drew"), PLAID_CLIENT_ID, PLAID_SECRET, PLAID_ENV (sandbox|production), SESSION_SECRET, APP_PASSWORD_HASH, GOOGLE_CLOUD_PROJECT, FIRESTORE_DATABASE (default "finance"), FIRESTORE_EMULATOR_HOST (dev), KMS_KEY_NAME (full resource name of the key; unset → dev crypto), DEV_ENCRYPTION_KEY (64 hex chars = 32 bytes), APP_TIMEZONE (default America/Denver), PUBLIC_URL (public base URL, e.g. https://reserve.example.com or the run.app URL), RUN_SERVICE_URL (the run.app URL), SCHEDULER_SA_EMAIL, STATIC_DIR`
 
 Cloud Run secret env mapping: `PLAID_CLIENT_ID←plaid-client-id`, `PLAID_SECRET←plaid-secret`, `APP_PASSWORD_HASH←app-password-hash`, `SESSION_SECRET←session-secret`.
 
 OIDC on `/api/internal/sync`: the audience must be either `RUN_SERVICE_URL` or `PUBLIC_URL`, and the email must be `SCHEDULER_SA_EMAIL` with `email_verified`. Cloud Scheduler targets `${RUN_SERVICE_URL}/api/internal/sync` with audience `RUN_SERVICE_URL`.
 
 ## API conventions
-- JSON everywhere. Errors are `{ "error": string }` with an appropriate status. A 401 means the user isn't logged in.
-- State-changing requests (POST/PUT/PATCH/DELETE) to session-protected routes, and to login, must carry `X-Requested-With: reserve`, or they get a 403.
+- JSON everywhere. Errors are `{ "error": string }` with an appropriate status. A 401 means the user isn't logged in. A 403 `{error:"password_change_required"}` on any non-auth route means the account must change its password first (the web routes to the change-password screen). `/api/*` responses are `Cache-Control: no-store`.
+- State-changing requests (POST/PUT/PATCH/DELETE) to session-protected routes, and to every `/api/auth/*` route, must carry `X-Requested-With: reserve`, or they get a 403.
 - Money is a JS number in dollars. Dates are `YYYY-MM-DD` strings. Timestamps are ISO strings.
 - `GET /api/health` (public) → `{ ok: true }`
 
@@ -27,8 +27,7 @@ OIDC on `/api/internal/sync`: the audience must be either `RUN_SERVICE_URL` or `
 type Group = 'cash'|'investments'|'retirement'|'credit'|'loans'|'other';
 type ItemStatus = 'ok'|'login_required'|'error';
 
-POST /api/auth/login {password} → 200 {ok:true} | 401 {error:"Invalid password"} | 429
-GET  /api/auth/me → {authenticated:true}
+see "Accounts and MFA" below for /api/auth/* and /api/users
 POST /api/sync → {ok:true, skipped?:true, lastSyncAt:string|null}
 POST /api/items/:id/sync → {ok:true, status:ItemStatus, lastSyncAt:string|null} | 404   // not debounced; web calls it after Plaid Link update-mode (reconnect) success
 GET  /api/categories (session) → [{key, label}]   // all category keys incl. income/transfer/other
@@ -59,6 +58,55 @@ DELETE /api/items/:id → {ok:true}
 PATCH /api/accounts/:id {hidden} → Account
 POST /api/dev/seed (non-production only, session required) → {ok:true, itemId}
 ```
+
+## Accounts and MFA
+
+Shared household data: the finance collections are not scoped by user. Roles are `admin` and `member`; only admins use `/api/users`. TOTP is required for every account. Firestore: `users/{userId}` and `usernames/{username}` → `{userId}` (uniqueness, written in one transaction). User fields: username, displayName, initials, passwordHash (bcrypt 12), role, totpSecretEnc (`kms:`/`dev:` ciphertext), totpPendingEnc (enrollment in progress), totpEnabled, totpLastStep, recoveryCodes (sha256 hex, single-use), mustChangePassword, sessionVersion, disabled, failedLogins, failedWindowStart, lockedUntil, createdAt, createdBy, lastLoginAt.
+
+Cookies (all `httpOnly; SameSite=Strict; Path=/`, `Secure` in production):
+- `reserve_pending`: 5 min, HS256 JWT `{sub, sv, stage:'mfa'|'enroll', typ:'pending', aud:'reserve:pending', jti}`. Only the `/api/auth/mfa*` routes read it.
+- `reserve_session`: 30 days, `{sub:userId, sv, typ:'session', aud:'reserve:session', jti}`. The two token kinds use different keys derived from `SESSION_SECRET` (HMAC with a purpose label), so neither verifies as the other.
+- `requireSession` loads the user (in-memory cache, 30 s, dropped on writes made through this instance) and rejects with 401 when the user is missing or disabled, `sv` differs from `sessionVersion`, or `totpEnabled` is false. It sets `req.user = {id, username, displayName, initials, role}`.
+
+```ts
+type AuthUser = { id; username; displayName; initials; role: 'admin'|'member' };
+type PublicUser = { id; username; displayName; role; totpEnabled: boolean; disabled: boolean; lastLoginAt: string|null; createdAt: string };
+
+POST /api/auth/login {username, password} → 200 {next:'mfa'|'enroll'} + reserve_pending
+     | 401 {error:"Invalid username or password"} (unknown user, wrong password, disabled and locked accounts are indistinguishable) | 429
+POST /api/auth/mfa {code} (pending stage 'mfa'; code = 6-digit TOTP, +/-1 step, or a recovery code xxxx-xxxx)
+     → 200 {ok:true, mustChangePassword, recoveryCodesRemaining} + reserve_session, pending cleared
+     | 401 {error:"Invalid code"} | 401 {error:"Session expired. Sign in again."} | 429
+POST /api/auth/mfa/setup {code?} (pending 'enroll'; or a full session, which must send the current TOTP `code`)
+     → {otpauthUrl, secret, qrSvg}   // label "Reserve:<username>", issuer "Reserve", SHA1/6/30; qrSvg is an inline SVG string
+POST /api/auth/mfa/enable {code} → 200 {ok:true, recoveryCodes:string[10] /* shown once */, mustChangePassword}
+     // from 'enroll' it also sets reserve_session and clears pending | 401 {error:"Invalid code"} | 409 if setup was not called
+GET  /api/auth/me → 200 {authenticated:true, user:AuthUser, mustChangePassword} | 401
+POST /api/auth/password {currentPassword, newPassword /* 12-72 bytes */} → {ok:true}   // bumps sessionVersion, re-issues this session
+POST /api/auth/recovery-codes {code /* current TOTP */} → {recoveryCodes:string[10]}    // replaces the old set; blocked while mustChangePassword
+POST /api/auth/logout → {ok:true}   // clears both cookies
+```
+- Brute-force limits: the per-IP login limiter (5 failed attempts / 15 min) stays. Per account, 10 failed password or MFA attempts within 15 minutes set `lockedUntil` (+15 min; a locked login answers with the same generic 401). MFA, enable, re-enroll and recovery-code regeneration also allow 5 failures per 5 minutes per pending/session token or IP (429). A completed MFA login (not a password-only success) resets the counters.
+- TOTP replay: the accepted time step is written to `totpLastStep` in a transaction; a code at a step <= the stored one is rejected. A recovery code is removed in a transaction, so only one request can spend it.
+- Enrollment: `setup` stores the new secret encrypted as pending only. An `enroll` token can never replace an enabled factor.
+
+### Users (admin only: 401 without a session, 403 for a member)
+```ts
+GET    /api/users → {users: PublicUser[]}
+POST   /api/users {username /* 3-32 of [a-z0-9._-], lowercased */, displayName /* 1-60 */, role, temporaryPassword /* 12-72 bytes */} → 201 PublicUser | 409 {error:"That username is taken"}
+         // mustChangePassword=true, totpEnabled=false: the person enrolls at first sign-in
+PATCH  /api/users/:id {displayName?, role?, disabled?} → PublicUser | 404      // disabling bumps sessionVersion
+POST   /api/users/:id/reset-password {temporaryPassword} → {ok:true}          // mustChangePassword, bumps sessionVersion, clears lockout
+POST   /api/users/:id/reset-mfa → {ok:true}                                   // clears TOTP + recovery codes, bumps sessionVersion
+DELETE /api/users/:id → {ok:true} | 404
+```
+Guards (400 `{error}`; checked inside the write transaction): an admin cannot delete, disable or demote themselves, and the last active admin cannot be deleted, disabled or demoted. Responses are an allow-list: never `passwordHash`, `totpSecretEnc`, `totpPendingEnc` or `recoveryCodes`.
+
+### Bootstrap
+While `users` is empty, `POST /api/auth/login` with `username == BOOTSTRAP_ADMIN_USERNAME` and a password that matches `APP_PASSWORD_HASH` creates that admin (`BOOTSTRAP_ADMIN_NAME`, password re-hashed at cost 12) and answers `{next:'enroll'}`. Once any user exists `APP_PASSWORD_HASH` is ignored.
+
+### Audit log
+One JSON line per event on stdout (`severity`, `message:"auth:<event>"`, `event`, `userId`, `username`, `ip`, `reason`/`changes`): login success/failure/lock, bootstrap, MFA success/failure/rate-limit/recovery-code use, enrollment, password change, recovery-code regeneration, user created/updated/deleted/password-reset/mfa-reset, logout. Never passwords, codes, secrets or tokens; unknown usernames are not logged.
 
 ## Recurring costs and savings goals
 
